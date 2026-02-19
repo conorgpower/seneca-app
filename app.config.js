@@ -13,7 +13,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.depaorgroup.seneca',
-      buildNumber: '1',
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
       icon: './assets/icon.png',
     },
     android: {
@@ -29,6 +31,9 @@ export default {
       favicon: './assets/favicon.png',
     },
     extra: {
+      eas: {
+        projectId: '7fb611e5-42a3-47b0-a70b-723e1c855af0',
+      },
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
       supabaseAssetBucket: process.env.SUPABASE_ASSET_BUCKET,
