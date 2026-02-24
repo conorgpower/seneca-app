@@ -6,6 +6,8 @@ import { Platform } from 'react-native';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -13,6 +15,19 @@ Notifications.setNotificationHandler({
 
 const NOTIFICATION_CHANNEL_ID = 'daily-reminder';
 const NOTIFICATION_TAG = 'seneca-daily-reminder';
+const TRIAL_ENDING_NOTIFICATION_TAG = 'seneca-trial-ending-reminder';
+
+/**
+ * Read current OS-level notification permission status without prompting.
+ */
+export async function hasNotificationPermission(): Promise<boolean> {
+  if (!Device.isDevice) {
+    return true;
+  }
+
+  const { status } = await Notifications.getPermissionsAsync();
+  return status === 'granted';
+}
 
 /**
  * Request notification permissions from the user.
@@ -32,9 +47,7 @@ export async function requestNotificationPermissions(): Promise<boolean> {
     });
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-
-  if (existingStatus === 'granted') return true;
+  if (await hasNotificationPermission()) return true;
 
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
@@ -104,6 +117,55 @@ export async function cancelAllReminders(): Promise<void> {
   for (const notification of senecaNotifications) {
     await Notifications.cancelScheduledNotificationAsync(notification.identifier);
   }
+}
+
+/**
+ * Cancel all scheduled Seneca trial-ending reminders.
+ */
+export async function cancelTrialEndingReminders(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const trialReminders = scheduled.filter(
+    (n) => n.content.data?.type === TRIAL_ENDING_NOTIFICATION_TAG
+  );
+  for (const notification of trialReminders) {
+    await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+  }
+}
+
+/**
+ * Schedule a one-time local notification shortly before a trial ends.
+ * Returns true if scheduled, false if skipped (no permission/invalid timing).
+ */
+export async function scheduleTrialEndingReminder(
+  trialEndsAt: Date,
+  leadTimeHours: number = 24
+): Promise<boolean> {
+  if (!Device.isDevice) return false;
+
+  const hasPermission = await hasNotificationPermission();
+  if (!hasPermission) return false;
+
+  const reminderAt = new Date(trialEndsAt.getTime() - leadTimeHours * 60 * 60 * 1000);
+  if (!Number.isFinite(reminderAt.getTime()) || reminderAt.getTime() <= Date.now()) {
+    return false;
+  }
+
+  await cancelTrialEndingReminders();
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Trial ending soon',
+      body: 'Your Seneca free trial ends tomorrow. Cancel anytime before billing starts.',
+      sound: true,
+      data: { type: TRIAL_ENDING_NOTIFICATION_TAG },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: reminderAt,
+    },
+  });
+
+  return true;
 }
 
 // Rotate through a few different motivating bodies so it doesn't feel stale

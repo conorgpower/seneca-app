@@ -33,6 +33,21 @@ export default {
     extra: {
       eas: {
         projectId: '7fb611e5-42a3-47b0-a70b-723e1c855af0',
+        build: {
+          experimental: {
+            ios: {
+              appExtensions: [
+                {
+                  targetName: 'WisdomWidgetModuleExtension',
+                  bundleIdentifier: 'com.depaorgroup.seneca.WisdomWidgetModule',
+                  entitlements: {
+                    'com.apple.security.application-groups': ['group.com.depaorgroup.seneca'],
+                  },
+                },
+              ],
+            },
+          },
+        },
       },
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
@@ -40,6 +55,7 @@ export default {
       supabaseOptimizedAssetBucket: process.env.SUPABASE_OPTIMIZED_ASSET_BUCKET,
       deepseekApiKey: process.env.DEEPSEEK_API_KEY,
       revenuecatApiKey: process.env.REVENUECAT_API_KEY,
+      revenuecatEntitlementId: process.env.REVENUECAT_ENTITLEMENT_ID,
       appsflyerDevKey: process.env.APPSFLYER_DEV_KEY,
       appsflyerIosAppId: process.env.APPSFLYER_IOS_APP_ID,
       mixpanelToken: process.env.MIXPANEL_TOKEN,

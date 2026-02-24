@@ -14,18 +14,43 @@ import {
   trackMixpanelStartTrialEvent,
   trackMixpanelSubscribeEvent,
 } from './mixpanel.service';
+import { scheduleTrialEndingReminder } from './notifications.service';
 
 const API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || '';
-const ENTITLEMENT_ID = 'Seneca Chat Pro';
-const PRO_PRODUCT_MARKERS = ['.seneca.pro.', '.pro.yearly', '.pro.monthly', '.pro.weekly'];
+// RevenueCat "entitlement identifier" (not display name). Configure via env if it differs per project.
+// Fallbacks are handled in hasProEntitlement() for resilience across dashboard changes.
+const ENTITLEMENT_ID = Constants.expoConfig?.extra?.revenuecatEntitlementId || 'pro';
 
 let isConfigured = false;
+
+function getActiveEntitlements(customerInfo: CustomerInfo): Record<string, any> {
+  return (customerInfo.entitlements?.active as any) || {};
+}
+
+function resolvePrimaryActiveEntitlement(customerInfo: CustomerInfo): any | null {
+  const active = getActiveEntitlements(customerInfo);
+  if (!active || typeof active !== 'object') return null;
+
+  const direct = (active as any)[ENTITLEMENT_ID];
+  if (direct) return direct;
+
+  const keys = Object.keys(active);
+  if (keys.length === 1) return (active as any)[keys[0]];
+
+  const proLikeKey = keys.find((k) => /pro|premium|plus/i.test(k));
+  if (proLikeKey) return (active as any)[proLikeKey];
+
+  return null;
+}
 
 /**
  * Initialize RevenueCat SDK - call once at app startup
  */
 export async function initializeRevenueCat(): Promise<void> {
   if (isConfigured) return;
+  if (!API_KEY) {
+    throw new Error('Missing RevenueCat API key (extra.revenuecatApiKey).');
+  }
   Purchases.setLogLevel(LOG_LEVEL.DEBUG);
   Purchases.configure({ apiKey: API_KEY });
   isConfigured = true;
@@ -62,32 +87,38 @@ export async function getCustomerInfo(): Promise<CustomerInfo> {
  * Check if the user has the "Seneca Chat Pro" entitlement
  */
 export function hasProEntitlement(customerInfo: CustomerInfo): boolean {
-  if (typeof customerInfo.entitlements.active[ENTITLEMENT_ID] !== 'undefined') {
-    return true;
-  }
+  const active = getActiveEntitlements(customerInfo);
+  if ((active as any)[ENTITLEMENT_ID]) return true;
 
-  return customerInfo.activeSubscriptions.some((productId) =>
-    PRO_PRODUCT_MARKERS.some((marker) => productId.includes(marker))
-  );
+  // If there is exactly one active entitlement, treat it as "pro" for this app.
+  const activeKeys = Object.keys(active || {});
+  if (activeKeys.length === 1) return true;
+
+  // Fallback: subscription may be active even if entitlements are misconfigured/renamed.
+  const activeSubs = (customerInfo as any).activeSubscriptions as string[] | undefined;
+  if (Array.isArray(activeSubs) && activeSubs.length > 0) return true;
+
+  // Fallback: some apps key entitlements differently (e.g. "premium", "plus").
+  if (activeKeys.some((k) => /pro|premium|plus/i.test(k))) return true;
+
+  return false;
 }
 
 /**
  * Get the subscription tier from active entitlements
  */
 export function getSubscriptionTier(customerInfo: CustomerInfo): string | null {
-  const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
+  const entitlement = resolvePrimaryActiveEntitlement(customerInfo);
   const productId =
     entitlement?.productIdentifier ||
-    customerInfo.activeSubscriptions.find((id) =>
-      PRO_PRODUCT_MARKERS.some((marker) => id.includes(marker))
-    );
+    ((customerInfo as any).activeSubscriptions?.[0] as string | undefined);
 
   if (!productId) return null;
 
   if (productId.includes('yearly')) return 'yearly';
   if (productId.includes('monthly')) return 'monthly';
   if (productId.includes('weekly')) return 'weekly';
-  return 'unknown';
+  return null;
 }
 
 /**
@@ -107,11 +138,35 @@ export async function purchasePackage(
 
   const currency = pkg.product.currencyCode || 'USD';
   const subscriptionId = productIdentifier || pkg.product.identifier;
-  const hasIntroTrial = Boolean(pkg.product.introPrice);
   const introPriceValue = Number((pkg.product.introPrice as any)?.price ?? 0);
   const productPriceValue = Number(pkg.product.price ?? 0);
+  const activeEntitlements = customerInfo.entitlements?.active || {};
+  const directEntitlement = (activeEntitlements as any)[ENTITLEMENT_ID];
+  const matchingEntitlement =
+    directEntitlement ||
+    Object.values(activeEntitlements as any).find(
+      (entitlement: any) => entitlement?.productIdentifier === subscriptionId
+    ) ||
+    // If the entitlement id changed (or display name was used), pick the sole active entitlement.
+    (Object.keys(activeEntitlements as any).length === 1
+      ? (activeEntitlements as any)[Object.keys(activeEntitlements as any)[0]]
+      : null);
+  const periodType = (matchingEntitlement as any)?.periodType;
+  const isTrialPeriod = periodType === 'trial';
 
-  if (hasIntroTrial) {
+  if (isTrialPeriod) {
+    const isYearlyPlan = subscriptionId.includes('yearly');
+    if (isYearlyPlan) {
+      const expirationDateRaw = (matchingEntitlement as any)?.expirationDate;
+      const trialEndsAt = expirationDateRaw
+        ? new Date(expirationDateRaw)
+        : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+
+      scheduleTrialEndingReminder(trialEndsAt, 24).catch((error) => {
+        console.error('Failed to schedule trial-ending reminder notification:', error);
+      });
+    }
+
     trackStartTrialEvent({
       price: Number.isFinite(introPriceValue) ? introPriceValue : 0,
       currency,

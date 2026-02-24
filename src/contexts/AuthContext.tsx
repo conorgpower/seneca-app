@@ -1,12 +1,23 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { Session, User, AuthError } from '@supabase/supabase-js';
 import { CustomerInfo } from 'react-native-purchases';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthService from '../services/auth.service';
 import * as UserProfileService from '../services/user-profile.service';
 import * as RevenueCatService from '../services/revenuecat.service';
 import * as AppsFlyerService from '../services/appsflyer.service';
 import * as MixpanelService from '../services/mixpanel.service';
-import { registerPushToken, deactivatePushToken } from '../services/push-token.service';
+import {
+  registerPushToken,
+  deactivatePushToken,
+  syncNotificationPrefs,
+} from '../services/push-token.service';
+import {
+  hasNotificationPermission,
+  cancelAllReminders,
+  scheduleReminders,
+} from '../services/notifications.service';
 
 interface AuthContextType {
   session: Session | null;
@@ -25,24 +36,57 @@ interface AuthContextType {
   ) => Promise<{ error: AuthError | null; session?: Session | null }>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
-  updateSubscriptionStatus: (
-    hasSubscription: boolean,
-    tier?: string,
-    revenueCat?: {
-      customerId?: string | null;
-      entitlements?: Record<string, any> | null;
-    }
-  ) => Promise<void>;
+  refreshSubscription: () => Promise<boolean>;
   saveOnboardingAnswers: (answers: Record<string, any>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const NOTIFICATION_PREFS_KEY = '@seneca_notification_prefs';
+
+interface NotificationPrefs {
+  pushEnabled: boolean;
+  dailyReminder: boolean;
+  streakReminder: boolean;
+  communityUpdates: boolean;
+  reminderHour: number;
+  reminderMinute: number;
+}
+
+const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  pushEnabled: true,
+  dailyReminder: true,
+  streakReminder: true,
+  communityUpdates: false,
+  reminderHour: 9,
+  reminderMinute: 0,
+};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const syncSubscriptionFromCustomerInfo = React.useCallback(
+    async (authUserId: string, info: CustomerInfo) => {
+      const hasPro = RevenueCatService.hasProEntitlement(info);
+      const tier = RevenueCatService.getSubscriptionTier(info) || undefined;
+
+      setHasActiveSubscription(hasPro);
+
+      const { error } = await UserProfileService.updateSubscriptionStatus(authUserId, hasPro, tier, {
+        customerId: info.originalAppUserId || authUserId,
+        entitlements: info.entitlements?.active || null,
+      });
+
+      if (error) {
+        console.error('Failed to persist subscription status to user profile:', error);
+      }
+
+      return hasPro;
+    },
+    []
+  );
 
   useEffect(() => {
     const identifyMixpanelUser = (authUser: User) => {
@@ -125,21 +169,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let isCancelled = false;
     const listener = async (info: CustomerInfo) => {
-      const hasPro = RevenueCatService.hasProEntitlement(info);
-      const tier = RevenueCatService.getSubscriptionTier(info) || undefined;
-      const { error } = await UserProfileService.updateSubscriptionStatus(
-        user.id,
-        hasPro,
-        tier,
-        {
-          customerId: info.originalAppUserId || user.id,
-          entitlements: info.entitlements?.active || null,
-        }
-      );
-
-      if (!isCancelled && !error) {
-        setHasActiveSubscription(hasPro);
-      }
+      if (isCancelled) return;
+      await syncSubscriptionFromCustomerInfo(user.id, info);
     };
 
     RevenueCatService.addCustomerInfoUpdateListener(listener);
@@ -153,6 +184,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+    const appStateRef = { current: AppState.currentState as AppStateStatus };
+
+    const reconcileNotificationPrefsWithOS = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(NOTIFICATION_PREFS_KEY);
+        const parsed = stored
+          ? { ...DEFAULT_NOTIFICATION_PREFS, ...JSON.parse(stored) }
+          : { ...DEFAULT_NOTIFICATION_PREFS };
+        const granted = await hasNotificationPermission();
+
+        const reconciled: NotificationPrefs = granted
+          ? parsed
+          : { ...parsed, pushEnabled: false };
+
+        if (!granted) {
+          await cancelAllReminders();
+        } else if (reconciled.pushEnabled && reconciled.dailyReminder) {
+          await scheduleReminders(reconciled.reminderHour, reconciled.reminderMinute, [1, 2, 3, 4, 5, 6, 7]);
+        }
+
+        if (!cancelled) {
+          await AsyncStorage.setItem(NOTIFICATION_PREFS_KEY, JSON.stringify(reconciled));
+          await syncNotificationPrefs(user.id, reconciled);
+        }
+      } catch (error) {
+        console.error('Failed to reconcile notification prefs with OS permissions:', error);
+      }
+    };
+
+    reconcileNotificationPrefsWithOS().catch((error) => {
+      console.error('Failed initial notification permission reconciliation:', error);
+    });
+
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      const wasBackgrounded = appStateRef.current === 'inactive' || appStateRef.current === 'background';
+      if (wasBackgrounded && nextState === 'active') {
+        reconcileNotificationPrefsWithOS().catch((error) => {
+          console.error('Failed foreground notification permission reconciliation:', error);
+        });
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => {
+      cancelled = true;
+      appStateSubscription.remove();
+    };
+  }, [user?.id]);
+
   const loadSubscriptionStatus = async (userId: string) => {
     try {
       const { profile } = await UserProfileService.getUserProfile(userId);
@@ -161,6 +245,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error loading subscription status:', error);
+    }
+  };
+
+  const refreshSubscription = async (): Promise<boolean> => {
+    if (!user?.id) return false;
+    try {
+      const info = await RevenueCatService.getCustomerInfo();
+      return await syncSubscriptionFromCustomerInfo(user.id, info);
+    } catch (error) {
+      console.error('Failed to refresh subscription from RevenueCat:', error);
+      return false;
     }
   };
 
@@ -232,28 +327,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateSubscriptionStatus = async (
-    hasSubscription: boolean,
-    tier?: string,
-    revenueCat?: {
-      customerId?: string | null;
-      entitlements?: Record<string, any> | null;
-    }
-  ) => {
-    if (!user) return;
-    
-    const { error } = await UserProfileService.updateSubscriptionStatus(
-      user.id,
-      hasSubscription,
-      tier,
-      revenueCat
-    );
-    
-    if (!error) {
-      setHasActiveSubscription(hasSubscription);
-    }
-  };
-
   const saveOnboardingAnswers = async (answers: Record<string, any>) => {
     if (!user) return;
     
@@ -270,7 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signOut,
     refreshSession,
-    updateSubscriptionStatus,
+    refreshSubscription,
     saveOnboardingAnswers,
   };
 

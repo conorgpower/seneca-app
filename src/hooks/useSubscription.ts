@@ -11,8 +11,10 @@ interface SubscriptionState {
 }
 
 interface SubscriptionActions {
-  purchasePackage: (pkg: PurchasesPackage) => Promise<boolean>;
-  restorePurchases: () => Promise<boolean>;
+  purchasePackage: (
+    pkg: PurchasesPackage
+  ) => Promise<{ didPurchase: boolean; isSubscribed: boolean; customerInfo?: CustomerInfo }>;
+  restorePurchases: () => Promise<{ isSubscribed: boolean; customerInfo: CustomerInfo }>;
   refreshStatus: () => Promise<void>;
 }
 
@@ -67,24 +69,24 @@ export function useSubscription(): SubscriptionState & SubscriptionActions {
     };
   }, [updateFromCustomerInfo]);
 
-  const purchasePackage = useCallback(async (pkg: PurchasesPackage): Promise<boolean> => {
+  const purchasePackage = useCallback(async (pkg: PurchasesPackage) => {
     try {
       const { customerInfo: info } = await RevenueCatService.purchasePackage(pkg);
       updateFromCustomerInfo(info);
-      return RevenueCatService.hasProEntitlement(info);
+      return { didPurchase: true, isSubscribed: RevenueCatService.hasProEntitlement(info), customerInfo: info };
     } catch (error: any) {
       if (error.userCancelled) {
-        return false;
+        return { didPurchase: false, isSubscribed: false };
       }
       throw error;
     }
   }, [updateFromCustomerInfo]);
 
-  const restorePurchases = useCallback(async (): Promise<boolean> => {
+  const restorePurchases = useCallback(async () => {
     try {
       const info = await RevenueCatService.restorePurchases();
       updateFromCustomerInfo(info);
-      return RevenueCatService.hasProEntitlement(info);
+      return { isSubscribed: RevenueCatService.hasProEntitlement(info), customerInfo: info };
     } catch (error) {
       console.error('Failed to restore purchases:', error);
       throw error;

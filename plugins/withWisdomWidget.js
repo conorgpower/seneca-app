@@ -450,6 +450,32 @@ function updateTargetBuildSettings(project, targetKey, settings) {
   }
 }
 
+function getTargetBuildSetting(project, targetKey, settingName, preferredConfigName) {
+  const configUuids = getTargetBuildConfigurationUuids(project, targetKey);
+  if (!configUuids.length) return null;
+
+  const buildConfigs = project.pbxXCBuildConfigurationSection();
+  let fallbackValue = null;
+
+  for (const uuid of configUuids) {
+    const config = buildConfigs[uuid];
+    if (!config || !config.buildSettings) continue;
+
+    const value = config.buildSettings[settingName];
+    if (!value) continue;
+
+    if (!fallbackValue) {
+      fallbackValue = value;
+    }
+
+    if (preferredConfigName && config.name === preferredConfigName) {
+      return value;
+    }
+  }
+
+  return fallbackValue;
+}
+
 function findBuildFileRefUuid(project, filePath) {
   const refs = project.pbxFileReferenceSection();
   for (const key of Object.keys(refs)) {
@@ -556,9 +582,13 @@ function withWisdomWidget(config) {
     const projectName = IOSConfig.XcodeUtils.getProjectName(config.modRequest.projectRoot);
     const bundleId = config.ios?.bundleIdentifier || 'com.depaorgroup.seneca';
     const widgetBundleId = `${bundleId}.${WIDGET_PRODUCT_BUNDLE_SUFFIX}`;
+    const appVersion = config.version || '1.0.0';
 
     const appTargetKey = findTargetKeyByName(project, projectName);
     let widgetTargetKey = findTargetKeyByName(project, WIDGET_TARGET_NAME);
+    const developmentTeam =
+      (appTargetKey && getTargetBuildSetting(project, appTargetKey, 'DEVELOPMENT_TEAM', 'Release')) ||
+      config.ios?.developmentTeam;
 
     if (!widgetTargetKey) {
       const created = project.addTarget(WIDGET_TARGET_NAME, 'app_extension', WIDGET_DIR, widgetBundleId);
@@ -578,13 +608,25 @@ function withWisdomWidget(config) {
     updateTargetBuildSettings(project, widgetTargetKey, {
       INFOPLIST_FILE: `${WIDGET_DIR}/Info.plist`,
       PRODUCT_BUNDLE_IDENTIFIER: widgetBundleId,
-      MARKETING_VERSION: '1.0',
+      MARKETING_VERSION: appVersion,
       CURRENT_PROJECT_VERSION: '1',
       IPHONEOS_DEPLOYMENT_TARGET: '16.0',
       SWIFT_VERSION: '5.0',
       APPLICATION_EXTENSION_API_ONLY: 'YES',
       CODE_SIGN_ENTITLEMENTS: `${WIDGET_DIR}/WisdomWidgetModule.entitlements`,
+      CODE_SIGN_STYLE: 'Automatic',
+      ...(developmentTeam ? { DEVELOPMENT_TEAM: developmentTeam } : {}),
     });
+
+    const firstProject = project.getFirstProject();
+    const targetAttributes = firstProject?.firstProject?.attributes?.TargetAttributes;
+    if (targetAttributes && widgetTargetKey) {
+      targetAttributes[widgetTargetKey] = {
+        ...(targetAttributes[widgetTargetKey] || {}),
+        ProvisioningStyle: 'Automatic',
+        ...(developmentTeam ? { DevelopmentTeam: developmentTeam } : {}),
+      };
+    }
 
     const mainGroupKey = project.getFirstProject().firstProject.mainGroup;
     ensureWidgetGroup(project);

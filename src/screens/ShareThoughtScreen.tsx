@@ -33,6 +33,13 @@ export default function ShareThoughtScreen() {
   const characterCount = inputText.length;
   const isValid = inputText.trim().length > 0 && characterCount <= MAX_CHARACTERS;
 
+  const returnToCommunityMain = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'CommunityMain' as never }],
+    });
+  };
+
   const handleSubmit = async () => {
     if (!isValid || !user) return;
 
@@ -76,7 +83,7 @@ export default function ShareThoughtScreen() {
         [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: returnToCommunityMain,
           },
         ]
       );
@@ -110,7 +117,7 @@ export default function ShareThoughtScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <TouchableOpacity onPress={returnToCommunityMain} style={styles.backButton}>
               <Text style={styles.backButtonText}>← Back</Text>
             </TouchableOpacity>
           </View>

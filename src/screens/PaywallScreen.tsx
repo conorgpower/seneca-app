@@ -13,10 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PurchasesPackage } from 'react-native-purchases';
-import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { theme } from '../theme';
 import { useSubscription } from '../hooks/useSubscription';
-import { ENTITLEMENT_ID } from '../services/revenuecat.service';
 import { trackOnboardingScreenView } from '../services/mixpanel.service';
 import { TERMS, PRIVACY } from '../utils/legalContent';
 import { getSupabaseImageSource } from '../data/asset-cdn';
@@ -97,6 +95,8 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
   const [step, setStep] = useState<1 | 2>(1);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isConfirmingSubscription, setIsConfirmingSubscription] = useState(false);
+  const [showSlowConfirmationHint, setShowSlowConfirmationHint] = useState(false);
   const [legalModal, setLegalModal] = useState<{ visible: boolean; title: string; content: string }>({
     visible: false,
     title: '',
@@ -151,6 +151,7 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
   }, [offerings]);
 
   const selectedPackage = resolvedPackages.find((p) => p.id === selectedPlan);
+  const hasSelectedIntroTrial = Boolean(selectedPackage?.rcPackage.product.introPrice);
 
   useEffect(() => {
     trackOnboardingScreenView({
@@ -163,17 +164,36 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
     });
   }, [step]);
 
+  useEffect(() => {
+    if (!isConfirmingSubscription) {
+      setShowSlowConfirmationHint(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowSlowConfirmationHint(true);
+    }, 10000);
+
+    return () => clearTimeout(timer);
+  }, [isConfirmingSubscription]);
+
+  const isBusy = isPurchasing || isRestoring || isConfirmingSubscription;
+  const canRetryRestore = showSlowConfirmationHint || !isConfirmingSubscription;
+
   const handleProceedForFree = () => {
+    if (isBusy) return;
     setStep(2);
   };
 
   const handleSubscribe = async () => {
-    if (!selectedPackage) return;
+    if (!selectedPackage || isBusy) return;
 
+    setShowSlowConfirmationHint(false);
     setIsPurchasing(true);
     try {
-      const success = await purchasePackage(selectedPackage.rcPackage);
-      if (success) {
+      const result = await purchasePackage(selectedPackage.rcPackage);
+      if (result.didPurchase) {
+        setIsConfirmingSubscription(true);
         onSubscribe();
       }
     } catch (error: any) {
@@ -187,37 +207,29 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
   };
 
   const handleRestore = async () => {
+    if (!canRetryRestore || isRestoring || isPurchasing) return;
+
+    setShowSlowConfirmationHint(false);
     setIsRestoring(true);
     try {
-      const restored = await restorePurchases();
-      if (restored) {
-        Alert.alert('Restored', 'Your purchases have been restored.', [
-          { text: 'OK', onPress: onSubscribe },
-        ]);
+      const result = await restorePurchases();
+      if (result.isSubscribed) {
+        setIsConfirmingSubscription(true);
+        onSubscribe();
       } else {
+        setIsConfirmingSubscription(false);
         Alert.alert('No Purchases Found', 'We could not find any previous purchases to restore.');
       }
     } catch (error: any) {
+      setIsConfirmingSubscription(false);
       Alert.alert('Restore Failed', error.message || 'Failed to restore purchases.');
     } finally {
       setIsRestoring(false);
     }
   };
 
-  const handlePresentRevenueCatPaywall = async () => {
-    try {
-      const result = await RevenueCatUI.presentPaywallIfNeeded({
-        requiredEntitlementIdentifier: ENTITLEMENT_ID,
-      });
-      if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-        onSubscribe();
-      }
-    } catch (error) {
-      console.error('Error presenting RevenueCat paywall:', error);
-    }
-  };
-
   const handleBackPress = () => {
+    if (isBusy) return;
     if (step === 2) {
       setStep(1);
     } else if (onBack) {
@@ -281,13 +293,13 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
           styles.title,
           styles.step2Title,
         ]}>
-          {selectedPlan === 'yearly'
+          {selectedPlan === 'yearly' && hasSelectedIntroTrial
             ? 'Start your FREE trial to continue'
             : 'Unlock Seneca to continue'}
         </Text>
       </View>
 
-      {selectedPlan === 'yearly' ? (
+      {selectedPlan === 'yearly' && hasSelectedIntroTrial ? (
         <View style={styles.timelineContainer}>
           {TRIAL_TIMELINE.map((item, index) => (
             <View key={index} style={styles.timelineItem}>
@@ -348,8 +360,10 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
                   styles.plan,
                   selectedPlan === plan.id && styles.planSelected,
                   plan.id === 'yearly' && styles.planWithBadge,
+                  isBusy && styles.interactionDisabled,
                 ]}
                 onPress={() => setSelectedPlan(plan.id)}
+                disabled={isBusy}
               >
                 {plan.id === 'yearly' && (
                   <View style={styles.discountBadge}>
@@ -381,25 +395,45 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
 
 
           <TouchableOpacity
-            style={[styles.subscribeButton, isPurchasing && styles.buttonDisabled]}
+            style={[styles.subscribeButton, isBusy && styles.buttonDisabled]}
             onPress={handleSubscribe}
-            disabled={isPurchasing}
+            disabled={isBusy}
           >
-            {isPurchasing ? (
+            {isPurchasing || isRestoring ? (
               <ActivityIndicator size="small" color={theme.colors.background} />
+            ) : isConfirmingSubscription ? (
+              <Text style={styles.subscribeButtonText}>Confirming subscription...</Text>
             ) : (
               <Text style={styles.subscribeButtonText}>
-                {selectedPlan === 'yearly' ? 'Start My Free Trial' : 'Start My Journey'}
+                {selectedPlan === 'yearly' && hasSelectedIntroTrial ? 'Start My Free Trial' : 'Start My Journey'}
               </Text>
             )}
           </TouchableOpacity>
 
-          {selectedPackage && (
-            <Text style={styles.disclaimer}>
-              {selectedPlan === 'yearly'
-                ? `Free trial, then ${selectedPackage.priceString} per year (${selectedPackage.pricePerMonth})`
-                : `Just ${selectedPackage.priceString} per ${selectedPlan === 'weekly' ? 'week' : 'month'}`}
+          {isConfirmingSubscription && (
+            <Text style={styles.confirmingText}>Confirming subscription...</Text>
+          )}
+          {showSlowConfirmationHint && (
+            <Text style={styles.slowConfirmationText}>
+              This can take a few seconds. Still processing? Tap Restore to retry.
             </Text>
+          )}
+
+          {selectedPackage && (
+            <>
+              <Text style={styles.disclaimer}>
+                {selectedPlan === 'yearly' && hasSelectedIntroTrial
+                  ? `Free trial, then ${selectedPackage.priceString} per year (${selectedPackage.pricePerMonth})`
+                  : selectedPlan === 'yearly'
+                    ? `${selectedPackage.priceString} per year (${selectedPackage.pricePerMonth})`
+                    : `Just ${selectedPackage.priceString} per ${selectedPlan === 'weekly' ? 'week' : 'month'}`}
+              </Text>
+              {selectedPlan === 'yearly' && (
+                <Text style={styles.trialEligibilityDisclosure}>
+                  Free trial available to eligible new subscribers only.
+                </Text>
+              )}
+            </>
           )}
         </>
       )}
@@ -414,15 +448,21 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
             <TouchableOpacity
               style={styles.backButton}
               onPress={handleBackPress}
+              disabled={isBusy}
             >
-              <Text style={styles.backButtonText}>← Back</Text>
+              <Text style={[styles.backButtonText, isBusy && styles.textDisabled]}>← Back</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.backButton} />
           )}
-          <TouchableOpacity onPress={handleRestore} disabled={isRestoring}>
-            <Text style={styles.restoreText}>
-              {isRestoring ? 'Restoring...' : 'Restore'}
+          <TouchableOpacity onPress={handleRestore} disabled={!canRetryRestore || isRestoring || isPurchasing}>
+            <Text
+              style={[
+                styles.restoreText,
+                (!canRetryRestore || isRestoring || isPurchasing) && styles.textDisabled,
+              ]}
+            >
+              {isRestoring ? 'Restoring...' : isConfirmingSubscription ? 'Restore (Retry)' : 'Restore'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -434,8 +474,8 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
           {step === 1 ? renderStep1() : renderStep2ScrollableContent()}
 
           {onSkip && (
-            <TouchableOpacity onPress={onSkip} style={styles.skipButton}>
-              <Text style={styles.skipButtonText}>Skip for now (Test Mode)</Text>
+            <TouchableOpacity onPress={onSkip} style={styles.skipButton} disabled={isBusy}>
+              <Text style={[styles.skipButtonText, isBusy && styles.textDisabled]}>Skip for now (Test Mode)</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -796,10 +836,26 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.7,
   },
+  interactionDisabled: {
+    opacity: 0.55,
+  },
   subscribeButtonText: {
     fontSize: 17,
     fontWeight: '600',
     color: theme.colors.background,
+  },
+  confirmingText: {
+    fontSize: 13,
+    color: theme.colors.text,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  slowConfirmationText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 6,
+    lineHeight: 16,
   },
   noCommitmentText: {
     fontSize: 14,
@@ -815,6 +871,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 0,
   },
+  trialEligibilityDisclosure: {
+    marginTop: 6,
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
   skipButton: {
     padding: theme.spacing.md,
     alignItems: 'center',
@@ -822,6 +885,9 @@ const styles = StyleSheet.create({
   skipButtonText: {
     fontSize: theme.typography.sizes.sm,
     color: theme.colors.textSecondary,
+  },
+  textDisabled: {
+    opacity: 0.45,
   },
   // Legal Document Modal
   modalSafeArea: {

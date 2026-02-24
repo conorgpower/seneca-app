@@ -58,26 +58,42 @@ export default function PrivacySettingsScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      // Flag the account for deletion
-                      // In production, handle this server-side
-                      if (user?.id) {
-                        await supabase
-                          .from('user_profiles')
-                          .update({ deletion_requested_at: new Date().toISOString() })
-                          .eq('id', user.id);
+                      if (!user?.id) {
+                        throw new Error('No authenticated user');
                       }
+
+                      const { data: sessionData } = await supabase.auth.getSession();
+                      const accessToken = sessionData.session?.access_token;
+                      if (!accessToken) {
+                        throw new Error('No active session');
+                      }
+
+                      const { error } = await supabase.functions.invoke('delete-account', {
+                        body: {},
+                        headers: {
+                          Authorization: `Bearer ${accessToken}`,
+                        },
+                      });
+                      if (error) throw error;
+
                       Alert.alert(
-                        'Account Deletion Requested',
-                        'Your account has been flagged for deletion. It will be permanently removed within 30 days. You will now be signed out.',
+                        'Account Deleted',
+                        'Your account and associated data have been permanently deleted.',
                         [
                           {
                             text: 'OK',
-                            onPress: () => signOut(),
+                            onPress: async () => {
+                              try {
+                                await signOut();
+                              } catch {
+                                // Session may already be invalid after deletion.
+                              }
+                            },
                           },
                         ],
                       );
                     } catch (err) {
-                      Alert.alert('Error', 'Failed to process request. Please contact support.');
+                      Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
                     }
                   },
                 },

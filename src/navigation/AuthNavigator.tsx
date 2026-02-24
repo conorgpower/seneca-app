@@ -41,7 +41,7 @@ type FlowStep =
   | 'login';
 
 export default function AuthNavigator() {
-  const { signUp, signIn, signOut, updateSubscriptionStatus, isAuthenticated, user } = useAuth();
+  const { signUp, signOut, isAuthenticated, user, refreshSubscription } = useAuth();
   const [currentFlow, setCurrentFlow] = useState<FlowStep>('welcome');
   const [onboardingAnswers, setOnboardingAnswers] = useState<Record<string, any>>({});
   const [questionPhase, setQuestionPhase] = useState<1 | 2 | 3 | 4>(1);
@@ -264,6 +264,11 @@ export default function AuthNavigator() {
   };
 
   const handlePlanReadyContinue = () => {
+    if (isAuthenticated) {
+      setCurrentFlow('paywall');
+      return;
+    }
+
     setCurrentFlow('create-account');
   };
 
@@ -340,19 +345,15 @@ export default function AuthNavigator() {
 
   const handleSubscribe = async () => {
     try {
-      // Get the latest customer info from RevenueCat to determine the tier
-      const customerInfo = await RevenueCatService.getCustomerInfo();
-      const tier = RevenueCatService.getSubscriptionTier(customerInfo) || 'yearly';
-
-      // Update subscription status in database
-      await updateSubscriptionStatus(true, tier, {
-        customerId: customerInfo.originalAppUserId || user?.id || null,
-        entitlements: customerInfo.entitlements?.active || null,
-      });
-
-      console.log('Subscription completed with tier:', tier);
+      const hasPro = await refreshSubscription();
+      if (!hasPro) {
+        Alert.alert(
+          'Subscription Pending',
+          'We could not confirm an active subscription yet. Please try Restore or wait a moment.'
+        );
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to update subscription status.');
+      Alert.alert('Error', 'Failed to verify subscription status.');
     }
   };
 
@@ -418,6 +419,12 @@ export default function AuthNavigator() {
   const handleBackFromPlanReady = () => {
     setCurrentFlow('setup-loading');
   };
+
+  React.useEffect(() => {
+    if (isAuthenticated && currentFlow === 'create-account') {
+      setCurrentFlow('paywall');
+    }
+  }, [isAuthenticated, currentFlow]);
 
   return (
     <Stack.Navigator
@@ -502,7 +509,7 @@ export default function AuthNavigator() {
         </Stack.Screen>
       )}
 
-      {currentFlow === 'create-account' && (
+      {currentFlow === 'create-account' && !isAuthenticated && (
         <Stack.Screen name="CreateAccount">
           {() => (
             <CreateAccountScreen

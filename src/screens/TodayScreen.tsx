@@ -11,10 +11,12 @@ import {
   Image,
   ImageBackground,
   InteractionManager,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../theme';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileDrawer from '../components/ProfileDrawer';
@@ -34,6 +36,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { drawerEvent } from '../utils/drawerEvent';
 import { COMICS, getComicCoverSources } from '../data/comics';
 import { getSupabaseImageSource } from '../data/asset-cdn';
+import * as TodayService from '../services/today.service';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
@@ -45,6 +48,7 @@ type TodayScreenNavigationProp = CompositeNavigationProp<
 
 const PASSAGE_BG_IMAGE = getSupabaseImageSource('images/passage-of-day.webp');
 const WISDOM_BG_IMAGE = getSupabaseImageSource('images/background-quote-2.webp');
+const REMINDER_FIRST_PROMPT_KEY = '@seneca_reminder_first_prompted';
 
 function prefetchRemoteSource(source: { uri?: string } | null) {
   if (!source?.uri) return;
@@ -73,6 +77,7 @@ export default function TodayScreen() {
   const [, forceImageRender] = useState(0);
   const imageLoadStartMsRef = useRef<Record<string, number>>({});
   const imageLoggedRef = useRef<Record<string, boolean>>({});
+  const hasCheckedReminderPromptRef = useRef(false);
 
   // Animation values for each ritual
   const animationValues = useRef({
@@ -164,11 +169,60 @@ export default function TodayScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    hasCheckedReminderPromptRef.current = false;
+  }, [user?.id]);
+
   // Refresh progress when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       refreshProgress();
-    }, [refreshProgress])
+
+      const maybePromptReminderSetup = async () => {
+        if (!user?.id || hasCheckedReminderPromptRef.current) return;
+        hasCheckedReminderPromptRef.current = true;
+
+        const perUserPromptKey = `${REMINDER_FIRST_PROMPT_KEY}:${user.id}`;
+        const alreadyPrompted = await AsyncStorage.getItem(perUserPromptKey);
+        if (alreadyPrompted) return;
+
+        const { data: reminderData, error } = await TodayService.getUserReminder(user.id);
+        if (error) {
+          console.error('Error checking reminder status for first prompt:', error);
+          return;
+        }
+
+        if (reminderData?.enabled) {
+          await AsyncStorage.setItem(perUserPromptKey, '1');
+          return;
+        }
+
+        Alert.alert(
+          'Keep your streak going',
+          'Enable daily reminders to keep your streak alive.',
+          [
+            {
+              text: 'Not now',
+              style: 'cancel',
+              onPress: () => {
+                AsyncStorage.setItem(perUserPromptKey, '1').catch(() => undefined);
+              },
+            },
+            {
+              text: 'Enable reminders',
+              onPress: () => {
+                AsyncStorage.setItem(perUserPromptKey, '1').catch(() => undefined);
+                navigation.navigate('Reminder');
+              },
+            },
+          ]
+        );
+      };
+
+      maybePromptReminderSetup().catch((error) => {
+        console.error('Failed to show reminder prompt:', error);
+      });
+    }, [navigation, refreshProgress, user?.id])
   );
 
   const dailyRituals = [
