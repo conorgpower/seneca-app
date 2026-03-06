@@ -130,13 +130,22 @@ export async function saveConversation(
         .eq('conversation_id', conversationId);
     }
 
-    const messagesToInsert = messages.map(msg => {
+    // GiftedChat keeps messages newest-first; reverse so we insert oldest-first
+    // and assign spaced-out timestamps to guarantee correct DB ordering
+    const chronological = [...messages].reverse();
+    const baseTime = chronological.length > 0
+      ? (chronological[0].createdAt instanceof Date
+          ? chronological[0].createdAt.getTime()
+          : new Date(chronological[0].createdAt).getTime())
+      : Date.now();
+
+    const messagesToInsert = chronological.map((msg, index) => {
       const convMsg = convertToConversationMessage(msg, conversationId!);
       return {
         conversation_id: convMsg.conversationId,
         role: convMsg.role,
         content: convMsg.content,
-        created_at: convMsg.createdAt.toISOString(),
+        created_at: new Date(baseTime + index * 1000).toISOString(),
       };
     });
 
@@ -252,7 +261,8 @@ export async function loadConversation(conversationId: string): Promise<Conversa
  * Convert conversation messages to IMessage format
  */
 export function convertConversationToIMessages(conversation: ConversationWithMessages): IMessage[] {
-  return conversation.messages.map(convertToIMessage);
+  // GiftedChat expects newest-first order (inverted FlatList)
+  return conversation.messages.map(convertToIMessage).reverse();
 }
 
 /**

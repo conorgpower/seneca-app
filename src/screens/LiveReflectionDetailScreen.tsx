@@ -6,12 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer } from 'expo-audio';
+import { XMarkIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from 'react-native-heroicons/solid';
 import { theme } from '../theme';
 import { isSoundEnabled } from '../hooks/useAppPreferences';
 import { getReflectionById } from '../services/reflection.service';
@@ -20,9 +21,11 @@ import type { CommunityReflection, Reflection } from '../types/reflection.types'
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import dayjs from 'dayjs';
 import { getSupabaseAudioSource } from '../data/asset-cdn';
+import { AnimatedMeshGradient } from '../components/AnimatedMeshGradient';
 
 type RouteParams = RouteProp<MainStackParamList, 'LiveReflectionDetail'>;
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ambientSource = getSupabaseAudioSource('audio/ambient-loop.mp3');
 
 export default function LiveReflectionDetailScreen() {
@@ -113,46 +116,83 @@ export default function LiveReflectionDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      </SafeAreaView>
+      <View style={styles.fullScreen}>
+        <AnimatedMeshGradient
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          borderRadius={0}
+          baseColors={['#151535', '#2A1A5E']}
+          blobColors={['#5C8EDE', '#9E7ABB']}
+          duration={12000}
+        />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   if (!reflection) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Reflection not found</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <View style={styles.fullScreen}>
+        <AnimatedMeshGradient
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          borderRadius={0}
+          baseColors={['#151535', '#2A1A5E']}
+          blobColors={['#5C8EDE', '#9E7ABB']}
+          duration={12000}
+        />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Reflection not found</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Text style={styles.backButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <LinearGradient
-      colors={['#1a1a2e', '#0f3460', '#16213e']}
-      style={styles.gradient}
-    >
+    <View style={styles.fullScreen}>
+      <AnimatedMeshGradient
+        width={SCREEN_WIDTH}
+        height={SCREEN_HEIGHT}
+        borderRadius={0}
+        baseColors={['#151535', '#2A1A5E']}
+        blobColors={['#5C8EDE', '#9E7ABB']}
+        duration={12000}
+      />
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>✕</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
+            <XMarkIcon size={22} color="#FFFFFF" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleMute} style={styles.muteButton}>
-            <Text style={styles.muteButtonText}>{isMuted ? '🔇' : '🔊'}</Text>
+          <TouchableOpacity onPress={toggleMute} style={styles.iconButton}>
+            {isMuted ? (
+              <SpeakerXMarkIcon size={20} color="#FFFFFF" />
+            ) : (
+              <SpeakerWaveIcon size={20} color="#FFFFFF" />
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Content */}
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
+            {/* Live badge */}
+            {reflection.status === 'live' && (
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveBadgeText}>LIVE</Text>
+              </View>
+            )}
+
             {/* Display Name */}
             <Text style={styles.displayName}>{reflection.display_name}</Text>
 
@@ -163,7 +203,11 @@ export default function LiveReflectionDetailScreen() {
             </View>
 
             {/* Divider */}
-            <View style={styles.divider} />
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <View style={styles.dividerDiamond} />
+              <View style={styles.dividerLine} />
+            </View>
 
             {/* Generated Reflection */}
             <Text style={styles.reflectionText}>{reflection.generated_text}</Text>
@@ -189,16 +233,17 @@ export default function LiveReflectionDetailScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: {
+  fullScreen: {
     flex: 1,
+    backgroundColor: '#151535',
   },
   safeArea: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   loadingContainer: {
     flex: 1,
@@ -213,47 +258,33 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: theme.typography.sizes.lg,
-    color: theme.colors.text,
+    color: '#FFFFFF',
     marginBottom: theme.spacing.lg,
   },
   backButton: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.full,
   },
   backButtonText: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '600',
-    color: theme.colors.background,
+    color: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 24,
-    color: '#ffffff',
-  },
-  muteButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  muteButtonText: {
-    fontSize: 20,
   },
   scrollView: {
     flex: 1,
@@ -263,13 +294,37 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxl,
     justifyContent: 'center',
   },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.full,
+    marginBottom: theme.spacing.lg,
+    gap: 6,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4ADE80',
+  },
+  liveBadgeText: {
+    fontSize: theme.typography.sizes.xs,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+  },
   displayName: {
-    fontSize: theme.typography.sizes.xl,
-    fontWeight: '600',
-    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: theme.spacing.xl,
   },
@@ -277,45 +332,61 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   inputLabel: {
-    fontSize: theme.typography.sizes.sm,
-    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: theme.typography.sizes.xs,
+    color: 'rgba(255, 255, 255, 0.5)',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 2,
     marginBottom: theme.spacing.sm,
     textAlign: 'center',
   },
   inputText: {
     fontSize: theme.typography.sizes.md,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.75)',
     textAlign: 'center',
     fontStyle: 'italic',
+    lineHeight: 24,
   },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  dividerDiamond: {
+    width: 8,
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    transform: [{ rotate: '45deg' }],
+    marginHorizontal: 12,
   },
   reflectionText: {
-    fontSize: theme.typography.sizes.lg,
-    color: '#ffffff',
-    lineHeight: 32,
+    fontSize: 20,
+    color: '#FFFFFF',
+    lineHeight: 34,
     textAlign: 'center',
+    fontWeight: '400',
   },
   timerContainer: {
     marginTop: theme.spacing.xxl,
     alignItems: 'center',
   },
   timerLabel: {
-    fontSize: theme.typography.sizes.sm,
-    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: theme.typography.sizes.xs,
+    color: 'rgba(255, 255, 255, 0.5)',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 2,
     marginBottom: theme.spacing.sm,
   },
   timerText: {
-    fontSize: theme.typography.sizes.xxxl,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontSize: 40,
+    fontWeight: '200',
+    color: '#FFFFFF',
+    letterSpacing: 4,
   },
   statusContainer: {
     marginTop: theme.spacing.xxl,
@@ -323,6 +394,6 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: theme.typography.sizes.md,
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
 });

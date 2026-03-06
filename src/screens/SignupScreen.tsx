@@ -5,13 +5,22 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  useAnimatedReaction,
+  useSharedValue,
+  withSpring,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import {
+  useReanimatedKeyboardAnimation,
+  KeyboardAwareScrollView,
+} from 'react-native-keyboard-controller';
 import { useAuth } from '../contexts/AuthContext';
 import { theme } from '../theme';
 
@@ -27,13 +36,55 @@ export default function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const { progress } = useReanimatedKeyboardAnimation();
+  const bounceOffset = useSharedValue(0);
+
+  useAnimatedReaction(
+    () => progress.value,
+    (current, previous) => {
+      if (previous !== null && previous < 0.9 && current >= 0.9) {
+        bounceOffset.value = -25;
+        bounceOffset.value = withSpring(0, { damping: 4, stiffness: 180, mass: 0.6 });
+      }
+      if (previous !== null && previous > 0.1 && current <= 0.1) {
+        bounceOffset.value = 12;
+        bounceOffset.value = withSpring(0, { damping: 6, stiffness: 200, mass: 0.5 });
+      }
+    },
+  );
+
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    const scale = withSpring(
+      interpolate(progress.value, [0, 1], [1, 0.85], Extrapolation.CLAMP),
+      { damping: 14, stiffness: 100 },
+    );
+    const opacity = withSpring(
+      interpolate(progress.value, [0, 0.5], [1, 0], Extrapolation.CLAMP),
+      { damping: 14, stiffness: 100 },
+    );
+    const maxHeight = interpolate(progress.value, [0, 1], [200, 0], Extrapolation.CLAMP);
+    const marginBottom = interpolate(
+      progress.value,
+      [0, 1],
+      [theme.spacing.xl, 0],
+      Extrapolation.CLAMP,
+    );
+
+    return {
+      transform: [{ scale }, { translateY: bounceOffset.value }],
+      opacity,
+      maxHeight,
+      marginBottom,
+      overflow: 'hidden' as const,
+    };
+  });
+
   const validateEmail = (email: string) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(email.trim());
   };
 
   const validatePassword = (password: string) => {
-    // At least 8 characters, one uppercase, one lowercase, one number
     if (password.length < 8) {
       return { valid: false, message: 'Password must be at least 8 characters' };
     }
@@ -50,11 +101,9 @@ export default function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
   };
 
   const handleSignup = async () => {
-    // Trim inputs
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
 
-    // Validation
     if (!trimmedName || !trimmedEmail || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -83,12 +132,11 @@ export default function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
 
     setLoading(true);
     try {
-      const { error, session } = await signUp(trimmedEmail, password, { name: trimmedName });
-      
+      const { error } = await signUp(trimmedEmail, password, { name: trimmedName });
+
       if (error) {
         Alert.alert('Signup Failed', error.message);
       }
-      // Auth context will handle navigation on successful signup
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
@@ -98,20 +146,18 @@ export default function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bottomOffset={20}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
+        <Animated.View style={[styles.header, headerAnimatedStyle]}>
           <Text style={styles.title}>Begin Your Journey</Text>
           <Text style={styles.subtitle}>
             Join thousands seeking wisdom from the great philosophers
           </Text>
-        </View>
+        </Animated.View>
 
         <View style={styles.form}>
           <TextInput
@@ -147,16 +193,16 @@ export default function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
           {password.length > 0 && (
             <View style={styles.passwordHints}>
               <Text style={[styles.passwordHint, password.length >= 8 && styles.passwordHintValid]}>
-                ✓ At least 8 characters
+                {'\u2713'} At least 8 characters
               </Text>
               <Text style={[styles.passwordHint, /[A-Z]/.test(password) && styles.passwordHintValid]}>
-                ✓ One uppercase letter
+                {'\u2713'} One uppercase letter
               </Text>
               <Text style={[styles.passwordHint, /[a-z]/.test(password) && styles.passwordHintValid]}>
-                ✓ One lowercase letter
+                {'\u2713'} One lowercase letter
               </Text>
               <Text style={[styles.passwordHint, /[0-9]/.test(password) && styles.passwordHintValid]}>
-                ✓ One number
+                {'\u2713'} One number
               </Text>
             </View>
           )}
@@ -204,8 +250,7 @@ export default function SignupScreen({ onNavigateToLogin }: SignupScreenProps) {
             <Text style={styles.secondaryButtonText}>Sign In</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -224,7 +269,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xxl,
   },
   header: {
-    marginBottom: theme.spacing.xl,
     alignItems: 'center',
   },
   title: {

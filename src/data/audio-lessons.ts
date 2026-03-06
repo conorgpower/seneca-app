@@ -13,6 +13,7 @@ type AudioLessonMeta = {
   id: AudioLessonId;
   title: string;
   description: string;
+  durationSeconds: number;
   path: string;
 };
 
@@ -21,44 +22,57 @@ const AUDIO_LESSONS: AudioLessonMeta[] = [
     id: 'amor_fati',
     title: 'Amor Fati',
     description: 'Loving your fate and embracing what happens.',
+    durationSeconds: 64,
     path: 'audio/lessons/Amor_Fati.mp3',
   },
   {
     id: 'the_borrowed_cup',
     title: 'The Borrowed Cup',
     description: 'A Stoic lesson on attachment and gratitude.',
+    durationSeconds: 74,
     path: 'audio/lessons/The_Borrowed_Cup.mp3',
   },
   {
     id: 'memento_mori',
     title: 'Memento Mori',
     description: 'Remembering mortality to live with intention.',
+    durationSeconds: 64,
     path: 'audio/lessons/Memento_Mori.mp3',
   },
   {
     id: 'obstacle_becomes_way',
     title: 'The Obstacle Becomes The Way',
     description: 'Turning adversity into growth through perspective.',
+    durationSeconds: 86,
     path: 'audio/lessons/The_Obstacle_Becomes_The_Way.mp3',
   },
   {
     id: 'arrow_and_target',
     title: 'The Arrow and the Target',
     description: 'Focus on your aim, not outcomes beyond control.',
+    durationSeconds: 63,
     path: 'audio/lessons/The_Arrow_And_The_Target.mp3',
   },
   {
     id: 'two_handles',
     title: 'The Two Handles',
     description: 'Choosing the interpretation that serves virtue.',
+    durationSeconds: 61,
     path: 'audio/lessons/The_Two_Handles.mp3',
   },
 ];
+
+export function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
 export const LESSONS = AUDIO_LESSONS.map((lesson) => ({
   id: lesson.id,
   title: lesson.title,
   description: lesson.description,
+  durationSeconds: lesson.durationSeconds,
 }));
 
 export function getAudioLessonById(id: string): AudioLessonMeta | null {

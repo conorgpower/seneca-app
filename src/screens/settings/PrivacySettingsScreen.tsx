@@ -2,8 +2,16 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../services/supabase';
+import {
+  ClipboardDocumentListIcon,
+  TrashIcon,
+  ArrowDownTrayIcon,
+  ExclamationTriangleIcon,
+  ChartBarIcon,
+} from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 
 export default function PrivacySettingsScreen() {
@@ -106,6 +114,7 @@ export default function PrivacySettingsScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -116,7 +125,7 @@ export default function PrivacySettingsScreen() {
         <SettingsRow
           type="link"
           label="Privacy Policy"
-          icon="📋"
+          icon={<ClipboardDocumentListIcon size={20} color={theme.colors.tertiary} />}
           onPress={() => Linking.openURL('https://senecaapp.com/privacy')}
           isFirst
           isLast
@@ -126,21 +135,21 @@ export default function PrivacySettingsScreen() {
         <SettingsRow
           type="navigate"
           label="Clear Conversation History"
-          icon="🗑️"
+          icon={<TrashIcon size={20} color={theme.colors.tertiary} />}
           onPress={handleClearHistory}
           isFirst
         />
         <SettingsRow
           type="navigate"
           label="Download My Data"
-          icon="📥"
+          icon={<ArrowDownTrayIcon size={20} color={theme.colors.tertiary} />}
           subtitle="Coming Soon"
           onPress={() => Alert.alert('Coming Soon', 'Data export will be available in a future update.')}
         />
         <SettingsRow
           type="destructive"
           label="Delete My Account"
-          icon="⚠️"
+          icon={<ExclamationTriangleIcon size={20} color="#FF4444" />}
           onPress={handleDeleteAccount}
           isLast
         />
@@ -149,7 +158,7 @@ export default function PrivacySettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Share Analytics"
-          icon="📊"
+          icon={<ChartBarIcon size={20} color={theme.colors.tertiary} />}
           value={analyticsEnabled}
           onValueChange={setAnalyticsEnabled}
           isFirst
@@ -157,13 +166,13 @@ export default function PrivacySettingsScreen() {
         />
       </ScrollView>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,

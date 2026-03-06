@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,21 +25,31 @@ import { useToday } from '../contexts/TodayContext';
 import { TodayStackParamList } from '../navigation/TodayNavigator';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import {
-  getDailyQuote,
   getDailyWidgetQuote,
   PhilosophicalQuote,
 } from '../services/philosophical-quotes.service';
 import { getDailyPassage } from '../services/philosophical-passages.service';
-import { updateWisdomWidget } from '../services/home-widget.service';
+import { updateWisdomWidget, updateWidgetBackgroundImages } from '../services/home-widget.service';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  FireIcon,
+  CalendarDaysIcon,
+  BookOpenIcon,
+  PencilSquareIcon,
+  LockClosedIcon,
+  ArrowUpRightIcon,
+} from 'react-native-heroicons/solid';
 import { drawerEvent } from '../utils/drawerEvent';
 import { COMICS, getComicCoverSources } from '../data/comics';
 import { getSupabaseImageSource } from '../data/asset-cdn';
 import * as TodayService from '../services/today.service';
 import type { CompositeNavigationProp } from '@react-navigation/native';
+import { AnimatedMeshGradient } from '../components/AnimatedMeshGradient';
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - theme.spacing.lg * 2;
+const EXPANDED_CARD_HEIGHT = 220;
 
 type TodayScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<TodayStackParamList, 'TodayMain'>,
@@ -67,10 +77,9 @@ async function prefetchRemoteSourceAsync(source: { uri?: string } | null) {
 export default function TodayScreen() {
   const navigation = useNavigation<TodayScreenNavigationProp>();
   const { user } = useAuth();
-  const { todayProgress, currentStreak, weeklyCompletions, refreshProgress } = useToday();
+  const { todayProgress, currentStreak, weeklyCompletions, dailyQuote, refreshProgress } = useToday();
   const [expandedRitual, setExpandedRitual] = useState<string | null>(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
-  const [dailyQuote, setDailyQuote] = useState<PhilosophicalQuote | null>(null);
   const [smallWidgetQuote, setSmallWidgetQuote] = useState<PhilosophicalQuote | null>(null);
   const [largeWidgetQuote, setLargeWidgetQuote] = useState<PhilosophicalQuote | null>(null);
   const [lockWidgetQuote, setLockWidgetQuote] = useState<PhilosophicalQuote | null>(null);
@@ -97,25 +106,26 @@ export default function TodayScreen() {
   }, [user?.user_metadata?.name, user?.email]);
 
   // Open drawer when returning from settings
-  useEffect(() => {
-    return drawerEvent.listen(() => setShowProfileDrawer(true));
-  }, []);
+  // Open drawer when returning from settings — only while this tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      return drawerEvent.listen(() => setShowProfileDrawer(true));
+    }, [])
+  );
 
-  // Fetch daily quote on mount (app quote + widget-specific quote pools)
+  // Fetch widget-specific quotes on mount (different length pools)
   useEffect(() => {
-    const fetchDailyQuotes = async () => {
-      const [appQuote, smallQuote, largeQuote, lockQuote] = await Promise.all([
-        getDailyQuote(),
+    const fetchWidgetQuotes = async () => {
+      const [smallQuote, largeQuote, lockQuote] = await Promise.all([
         getDailyWidgetQuote(72),
         getDailyWidgetQuote(150),
         getDailyWidgetQuote(80),
       ]);
-      setDailyQuote(appQuote);
       setSmallWidgetQuote(smallQuote);
       setLargeWidgetQuote(largeQuote);
       setLockWidgetQuote(lockQuote);
     };
-    fetchDailyQuotes();
+    fetchWidgetQuotes();
   }, []);
 
   useEffect(() => {
@@ -133,6 +143,7 @@ export default function TodayScreen() {
         author: lockWidgetQuote?.author,
       },
     });
+    updateWidgetBackgroundImages();
   }, [
     smallWidgetQuote?.quote_text,
     smallWidgetQuote?.author,
@@ -225,22 +236,32 @@ export default function TodayScreen() {
     }, [navigation, refreshProgress, user?.id])
   );
 
+  const ritualIconMap: Record<string, React.ReactNode> = {
+    fire: <FireIcon size={28} color="#FFFFFF" />,
+    book: <BookOpenIcon size={28} color="#FFFFFF" />,
+    pencil: <PencilSquareIcon size={28} color="#FFFFFF" />,
+  };
+
   const dailyRituals = [
     {
       id: 'checkin',
       title: 'DAILY CHECK-IN',
       duration: '1 MIN',
-      icon: '🔥',
+      icon: 'fire',
       completed: todayProgress?.checkInCompleted || false,
       prompt: 'How steady do you feel today?',
-      colors: ['#A8C5E5', '#E5B3D8', '#F4D4E5'],
+      colors: ['#0F2E2E', '#1A3D3D'],
+      mesh: {
+        baseColors: ['#0F2E2E', '#1A3D3D'] as [string, string],
+        blobColors: ['#6EECD0', '#42C8A8'] as [string, string],
+      },
       onPress: () => navigation.navigate('CheckIn'),
     },
     {
       id: 'passage',
       title: 'PASSAGE OF THE DAY',
       duration: '1 MIN',
-      icon: '📖',
+      icon: 'book',
       completed: todayProgress?.passageCompleted || false,
       prompt: 'Read and reflect on today\'s philosophical passage',
       colors: ['#4A90A4', '#2E7D8F', '#1B5E6F'],
@@ -250,10 +271,14 @@ export default function TodayScreen() {
       id: 'insight',
       title: 'PERSONALIZED INSIGHT',
       duration: '3 MIN',
-      icon: '✍️',
+      icon: 'pencil',
       completed: todayProgress?.insightCompleted || false,
       prompt: 'Discover how today\'s wisdom applies to you',
-      colors: ['#2A1A5E', '#5C3D9E', '#8F6CC8'],
+      colors: ['#151535', '#2A1A5E'],
+      mesh: {
+        baseColors: ['#151535', '#2A1A5E'] as [string, string],
+        blobColors: ['#5C8EDE', '#9E7ABB'] as [string, string],
+      },
       onPress: async () => {
         const passage = await getDailyPassage();
         if (passage && passage.reflection) {
@@ -301,8 +326,9 @@ export default function TodayScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.headerContainer}>
-          <ProfileAvatar 
+          <ProfileAvatar
             name={userName}
+            avatarUrl={user?.user_metadata?.avatar_url}
             onPress={() => setShowProfileDrawer(true)}
           />
           <View style={styles.header}>
@@ -312,10 +338,10 @@ export default function TodayScreen() {
             style={styles.calendarButton}
             onPress={() => navigation.navigate('Calendar')}
           >
-            <Text style={styles.streakEmoji}>🔥</Text>
+            <FireIcon size={18} color={theme.colors.primary} />
             <Text style={styles.streakNumber}>{streakCount}</Text>
             <Text style={styles.buttonDivider}>|</Text>
-            <Text style={styles.calendarIcon}>📅</Text>
+            <CalendarDaysIcon size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
@@ -340,7 +366,7 @@ export default function TodayScreen() {
                     isFuture && styles.dayCircleFuture,
                   ]}>
                     {dayData?.completed ? (
-                      <Text style={styles.dayFlame}>🔥</Text>
+                      <FireIcon size={20} color={theme.colors.primary} />
                     ) : (
                       <Text style={[styles.dayDateText, dayData?.isToday && styles.dayDateTextToday]}>
                         {dateNum ?? ''}
@@ -348,7 +374,9 @@ export default function TodayScreen() {
                     )}
                   </View>
                   {isPast && !dayData?.completed && (
-                    <Text style={styles.dayLock}>🔒</Text>
+                    <View style={styles.dayLock}>
+                      <LockClosedIcon size={14} color={theme.colors.primary} />
+                    </View>
                   )}
                 </View>
               </View>
@@ -402,7 +430,7 @@ export default function TodayScreen() {
                 {ritual.id === 'passage' && PASSAGE_BG_IMAGE ? (
                   <ImageBackground
                     source={PASSAGE_BG_IMAGE}
-                    style={[styles.ritualGradient, { padding: 0 }]}
+                    style={[styles.ritualGradient, { paddingVertical: 0, paddingLeft: 0, paddingRight: 0 }]}
                     imageStyle={styles.ritualImageBackground}
                     onLoadStart={() => {
                       imageLoadStartMsRef.current.passage = Date.now();
@@ -424,7 +452,7 @@ export default function TodayScreen() {
                               <Ionicons name="checkmark-circle" size={28} color="#FFFFFF" />
                             </View>
                           ) : (
-                            <Text style={styles.ritualIcon}>{ritual.icon}</Text>
+                            <View style={styles.ritualIconContainer}>{ritualIconMap[ritual.icon]}</View>
                           )}
                           <View style={styles.ritualInfo}>
                             <Text style={styles.ritualTitle}>{ritual.title}</Text>
@@ -447,12 +475,59 @@ export default function TodayScreen() {
                             style={styles.ritualStartButton}
                             onPress={(e) => { e?.stopPropagation?.(); ritual.onPress(); }}
                           >
-                            <Text style={styles.ritualStartIcon}>↗</Text>
+                            <ArrowUpRightIcon size={24} color="#000000" />
                           </TouchableOpacity>
                         </Animated.View>
                       )}
                     </View>
                   </ImageBackground>
+                ) : ritual.mesh ? (
+                  <View style={{ flex: 1 }}>
+                    <AnimatedMeshGradient
+                      width={CARD_WIDTH}
+                      height={EXPANDED_CARD_HEIGHT}
+                      borderRadius={theme.borderRadius.lg}
+                      baseColors={ritual.mesh.baseColors}
+                      blobColors={ritual.mesh.blobColors}
+                      duration={ritual.id === 'checkin' ? 10000 : 12000}
+                    />
+                    <View style={[styles.ritualGradient, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }]}>
+                      <View style={styles.ritualHeader}>
+                        <View style={styles.ritualLeft}>
+                          {ritual.completed ? (
+                            <View style={styles.checkmarkContainer}>
+                              <Ionicons name="checkmark-circle" size={28} color="#FFFFFF" />
+                            </View>
+                          ) : (
+                            <View style={styles.ritualIconContainer}>{ritualIconMap[ritual.icon]}</View>
+                          )}
+                          <View style={styles.ritualInfo}>
+                            <Text style={styles.ritualTitle}>{ritual.title}</Text>
+                            <Text style={styles.ritualDuration}>• {ritual.duration}</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.ritualAction}
+                          onPress={() => toggleExpanded(ritual.id)}
+                        >
+                          <Animated.View style={{ transform: [{ rotate: arrowRotation }] }}>
+                            <Ionicons name="chevron-down" size={20} color="#FFFFFF" />
+                          </Animated.View>
+                        </TouchableOpacity>
+                      </View>
+                      {isExpanded && (
+                        <Animated.View style={[styles.ritualPromptContainer, { opacity: contentOpacity }]}>
+                          <Text style={styles.ritualPromptText}>{ritual.prompt}</Text>
+                          <TouchableOpacity
+                            style={styles.ritualStartButton}
+                            onPress={(e) => { e?.stopPropagation?.(); ritual.onPress(); }}
+                          >
+                            <ArrowUpRightIcon size={24} color="#000000" />
+                          </TouchableOpacity>
+                        </Animated.View>
+                      )}
+                    </View>
+                  </View>
                 ) : (
                   <LinearGradient
                     colors={ritual.colors as [string, string, ...string[]]}
@@ -467,7 +542,7 @@ export default function TodayScreen() {
                             <Ionicons name="checkmark-circle" size={28} color="#FFFFFF" />
                           </View>
                         ) : (
-                          <Text style={styles.ritualIcon}>{ritual.icon}</Text>
+                          <View style={styles.ritualIconContainer}>{ritualIconMap[ritual.icon]}</View>
                         )}
                         <View style={styles.ritualInfo}>
                           <Text style={styles.ritualTitle}>{ritual.title}</Text>
@@ -490,7 +565,7 @@ export default function TodayScreen() {
                           style={styles.ritualStartButton}
                           onPress={(e) => { e?.stopPropagation?.(); ritual.onPress(); }}
                         >
-                          <Text style={styles.ritualStartIcon}>↗</Text>
+                          <ArrowUpRightIcon size={24} color="#000000" />
                         </TouchableOpacity>
                       </Animated.View>
                     )}
@@ -504,12 +579,10 @@ export default function TodayScreen() {
 
       {/* Quote of the Day */}
       <View style={styles.quoteCard}>
-        {WISDOM_BG_IMAGE ? (
-          <ImageBackground
+        {WISDOM_BG_IMAGE && (
+          <Image
             source={WISDOM_BG_IMAGE}
-            style={styles.quoteBackground}
-            imageStyle={styles.quoteBackgroundImage}
-            resizeMode="cover"
+            style={styles.quoteBackgroundImage}
             onLoadStart={() => {
               imageLoadStartMsRef.current.wisdom = Date.now();
             }}
@@ -521,26 +594,15 @@ export default function TodayScreen() {
               imageLoggedRef.current.wisdom = true;
               forceImageRender((v) => v + 1);
             }}
-          >
-            <View style={styles.quoteOverlay}>
-              <Text style={styles.quoteLabel}>Wisdom of the Day</Text>
-              <Text style={styles.quoteText}>
-                "{dailyQuote?.quote_text || 'Waste no more time arguing about what a good man should be. Be one.'}"
-              </Text>
-              <Text style={styles.quoteAuthor}>— {dailyQuote?.author || 'Marcus Aurelius, Meditations'}</Text>
-            </View>
-          </ImageBackground>
-        ) : (
-          <View style={[styles.quoteBackground, styles.quoteBackgroundFallback]}>
-            <View style={styles.quoteOverlay}>
-              <Text style={styles.quoteLabel}>Wisdom of the Day</Text>
-              <Text style={styles.quoteText}>
-                "{dailyQuote?.quote_text || 'Waste no more time arguing about what a good man should be. Be one.'}"
-              </Text>
-              <Text style={styles.quoteAuthor}>— {dailyQuote?.author || 'Marcus Aurelius, Meditations'}</Text>
-            </View>
-          </View>
+          />
         )}
+        <View style={styles.quoteOverlay}>
+          <Text style={styles.quoteLabel}>Wisdom of the Day</Text>
+          <Text style={styles.quoteText}>
+            "{dailyQuote?.quote_text || 'Waste no more time arguing about what a good man should be. Be one.'}"
+          </Text>
+          <Text style={styles.quoteAuthor}>— {dailyQuote?.author || 'Marcus Aurelius, Meditations'}</Text>
+        </View>
       </View>
     </ScrollView>
     <ProfileDrawer
@@ -563,6 +625,7 @@ const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.md,
+    paddingBottom: 100,
   },
   headerContainer: {
     flexDirection: 'row',
@@ -588,9 +651,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: theme.spacing.sm,
   },
-  streakEmoji: {
-    fontSize: 18,
-  },
   streakNumber: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '700',
@@ -600,9 +660,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.sizes.md,
     color: theme.colors.textSecondary,
     marginHorizontal: 2,
-  },
-  calendarIcon: {
-    fontSize: 18,
   },
   title: {
     fontSize: theme.typography.sizes.xxl,
@@ -619,6 +676,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
+    borderWidth: 3,
+    borderColor: theme.colors.quaternary,
   },
   streakHeader: {
     flexDirection: 'row',
@@ -670,9 +729,6 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: '700',
   },
-  dayFlame: {
-    fontSize: 20,
-  },
   dayCircleWrapper: {
     position: 'relative',
     width: 40,
@@ -710,8 +766,7 @@ const styles = StyleSheet.create({
     bottom: -4,
     left: 0,
     right: 0,
-    textAlign: 'center',
-    fontSize: 11,
+    alignItems: 'center',
   },
   progressSection: {
     flexDirection: 'row',
@@ -753,17 +808,24 @@ const styles = StyleSheet.create({
   },
   ritualGradient: {
     flex: 1,
-    padding: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.lg,
     justifyContent: 'space-between',
   },
   ritualImageBackground: {
     borderRadius: theme.borderRadius.lg,
+    top: -40,
+    bottom: 0,
+    height: undefined,
   },
   ritualImageOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
     borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.lg,
     justifyContent: 'space-between',
   },
   ritualHeader: {
@@ -775,14 +837,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
-  ritualIcon: {
-    fontSize: 28,
+  ritualIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkmarkContainer: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -796,11 +863,17 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   ritualDuration: {
     fontSize: theme.typography.sizes.xs,
     color: '#FFFFFF',
     opacity: 0.9,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   ritualAction: {
     width: 40,
@@ -823,6 +896,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     lineHeight: 32,
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   ritualStartButton: {
     width: 56,
@@ -837,50 +913,55 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  ritualStartIcon: {
-    fontSize: 24,
-    color: '#000000',
-  },
   quoteCard: {
+    backgroundColor: theme.colors.backgroundCard,
     borderRadius: theme.borderRadius.lg,
     marginBottom: theme.spacing.xl,
+    minHeight: 150,
     overflow: 'hidden',
   },
-  quoteBackground: {
-    width: '100%',
-    minHeight: 150,
-  },
-  quoteBackgroundFallback: {
-    backgroundColor: '#4A90A4',
-  },
   quoteBackgroundImage: {
-    borderRadius: theme.borderRadius.lg,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    right: -60,
+    resizeMode: 'cover',
   },
   quoteOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     padding: theme.spacing.lg,
-    flex: 1,
+    minHeight: 150,
     justifyContent: 'center',
   },
   quoteLabel: {
     fontSize: theme.typography.sizes.sm,
-    color: '#FFFFFF',
+    color: theme.colors.primary,
     marginBottom: theme.spacing.md,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    fontWeight: '600',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   quoteText: {
     fontSize: theme.typography.sizes.lg,
     color: '#FFFFFF',
+    fontWeight: '600',
     fontStyle: 'italic',
     marginBottom: theme.spacing.md,
     lineHeight: 26,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   quoteAuthor: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '700',
     color: '#FFFFFF',
-    opacity: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });

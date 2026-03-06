@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Share,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,10 +19,14 @@ import { useToday } from '../contexts/TodayContext';
 import * as TodayService from '../services/today.service';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import { Ionicons } from '@expo/vector-icons';
+import { PencilSquareIcon, ArrowRightIcon, ShareIcon, ChatBubbleLeftIcon } from 'react-native-heroicons/solid';
 import { triggerHaptic } from '../hooks/useAppPreferences';
+import { AnimatedMeshGradient } from '../components/AnimatedMeshGradient';
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList, 'Insight'>;
 type InsightRouteProp = RouteProp<MainStackParamList, 'Insight'>;
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function InsightScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -54,9 +59,12 @@ export default function InsightScreen() {
   };
 
   const handleChat = () => {
-    navigation.navigate('Chat' as any, {
-      initialContext: reflection,
-      initialMessage: `Help me apply this insight: "${reflection}"`,
+    navigation.navigate('App' as any, {
+      screen: 'Chat',
+      params: {
+        initialContext: reflection,
+        initialMessage: `Help me apply this insight: "${reflection}"`,
+      },
     });
   };
 
@@ -95,31 +103,37 @@ export default function InsightScreen() {
 
   if (!reflection) {
     return (
-      <LinearGradient
-        colors={['#2A1A5E', '#5C3D9E', '#8F6CC8']}
-        style={styles.gradientContainer}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
+      <View style={styles.container}>
+        <AnimatedMeshGradient
+          width={SCREEN_WIDTH}
+          height={SCREEN_HEIGHT}
+          borderRadius={0}
+          baseColors={['#151535', '#2A1A5E']}
+          blobColors={['#5C8EDE', '#9E7ABB']}
+          duration={12000}
+        />
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <View style={styles.errorContainer}>
+          <View style={styles.centeredContainer}>
             <Text style={styles.errorText}>No reflection available for this passage</Text>
             <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
               <Text style={styles.retryButtonText}>Go Back</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
-      </LinearGradient>
+      </View>
     );
   }
 
   return (
-    <LinearGradient
-      colors={['#2A1A5E', '#5C3D9E', '#8F6CC8']}
-      style={styles.gradientContainer}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
+    <View style={styles.container}>
+      <AnimatedMeshGradient
+        width={SCREEN_WIDTH}
+        height={SCREEN_HEIGHT}
+        borderRadius={0}
+        baseColors={['#151535', '#2A1A5E']}
+        blobColors={['#5C8EDE', '#9E7ABB']}
+        duration={12000}
+      />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.headerSection}>
@@ -147,7 +161,7 @@ export default function InsightScreen() {
 
         {/* Journey Label */}
         <View style={styles.journeyLabelContainer}>
-          <Text style={styles.journeyIcon}>✍️</Text>
+          <PencilSquareIcon size={18} color="rgba(255, 255, 255, 0.85)" />
           <Text style={styles.journeyLabel}>PERSONALIZED INSIGHT</Text>
           <Text style={styles.journeyDuration}>• 3 MIN</Text>
         </View>
@@ -169,34 +183,35 @@ export default function InsightScreen() {
         {/* Bottom Action Bar */}
         <View style={styles.bottomBar}>
           <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
-            <Ionicons name="share-outline" size={22} color="#FFFFFF" />
+            <ShareIcon size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.chatButton} onPress={handleChat}>
-            <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" />
+            <ChatBubbleLeftIcon size={16} color="#FFFFFF" />
             <Text style={styles.chatButtonText}>Chat to Learn More</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.iconButton, submitting && styles.iconButtonDisabled]}
+            style={[styles.nextButton, submitting && styles.nextButtonDisabled]}
             onPress={handleFinish}
             disabled={submitting}
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={theme.colors.background} />
             ) : (
-              <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
+              <ArrowRightIcon size={20} color={theme.colors.background} />
             )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradientContainer: {
+  container: {
     flex: 1,
+    backgroundColor: '#151535',
   },
   safeArea: {
     flex: 1,
@@ -212,6 +227,9 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.sizes.xxl,
     fontWeight: 'bold',
     color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   closeButton: {
     position: 'absolute',
@@ -220,7 +238,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -239,6 +257,9 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.sizes.md,
     fontWeight: '600',
     color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   progressPercentage: {
     fontSize: theme.typography.sizes.sm,
@@ -247,7 +268,7 @@ const styles = StyleSheet.create({
   },
   progressBarTrack: {
     height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -263,18 +284,18 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     gap: 6,
   },
-  journeyIcon: {
-    fontSize: 18,
-  },
   journeyLabel: {
     fontSize: theme.typography.sizes.xs,
     fontWeight: 'bold',
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255, 255, 255, 0.85)',
     letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   journeyDuration: {
     fontSize: theme.typography.sizes.xs,
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   scrollView: {
     flex: 1,
@@ -308,6 +329,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   bottomBar: {
     flexDirection: 'row',
@@ -317,25 +341,26 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
     gap: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   iconButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconButtonDisabled: {
-    opacity: 0.5,
   },
   chatButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing.sm + 4,
     gap: 6,
@@ -345,7 +370,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  errorContainer: {
+  nextButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  nextButtonDisabled: {
+    opacity: 0.5,
+  },
+  centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -358,7 +399,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,

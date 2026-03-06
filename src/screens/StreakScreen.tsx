@@ -11,11 +11,13 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../theme';
+import { FireIcon } from 'react-native-heroicons/solid';
 import { useAuth } from '../contexts/AuthContext';
 import { useToday } from '../contexts/TodayContext';
 import * as TodayService from '../services/today.service';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import { triggerHaptic } from '../hooks/useAppPreferences';
+import { AppBackground } from '../components/AppBackground';
 
 const REMINDER_PROMPT_KEY = 'lastReminderPromptDate';
 const REMINDER_PROMPT_COOLDOWN_DAYS = 7;
@@ -103,6 +105,7 @@ export default function StreakScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
         {/* Celebration */}
@@ -114,7 +117,7 @@ export default function StreakScreen() {
             },
           ]}
         >
-          <Text style={styles.flame}>🔥</Text>
+          <FireIcon size={80} color={theme.colors.primary} />
           <Text style={styles.streakNumber}>{newStreak}</Text>
           <Text style={styles.streakLabel}>Day Streak</Text>
         </Animated.View>
@@ -131,7 +134,9 @@ export default function StreakScreen() {
               return (
                 <View key={day.date} style={styles.dayColumn}>
                   {day.completed ? (
-                    <Text style={styles.flameEmoji}>🔥</Text>
+                    <View style={styles.flameContainer}>
+                      <FireIcon size={24} color={theme.colors.primary} />
+                    </View>
                   ) : (
                     <View style={[styles.dot, day.isToday && styles.dotToday]}>
                       <Text style={[styles.dayNumber, day.isToday && styles.dayNumberToday]}>
@@ -161,13 +166,13 @@ export default function StreakScreen() {
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
     flex: 1,
@@ -180,7 +185,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xl,
   },
   flame: {
-    fontSize: 80,
     marginBottom: theme.spacing.md,
   },
   streakNumber: {
@@ -217,11 +221,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  flameEmoji: {
-    fontSize: 30,
+  flameContainer: {
+    width: 38,
     height: 38,
-    textAlignVertical: 'center',
-    lineHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 38,

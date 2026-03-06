@@ -5,13 +5,21 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Alert,
   Image,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  useAnimatedReaction,
+  useSharedValue,
+  withSpring,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useAuth } from '../contexts/AuthContext';
 import * as AuthService from '../services/auth.service';
 import { theme } from '../theme';
@@ -35,6 +43,65 @@ export default function LoginScreen({
   const appleLogo = getSupabaseImageSource('images/logos/apple-white.webp');
   const googleLogo = getSupabaseImageSource('images/logos/google.webp');
 
+  const { height: keyboardHeight, progress } = useReanimatedKeyboardAnimation();
+  const bounceOffset = useSharedValue(0);
+
+  useAnimatedReaction(
+    () => progress.value,
+    (current, previous) => {
+      if (previous !== null && previous < 0.9 && current >= 0.9) {
+        // Keyboard just opened — overshoot upward then bounce back
+        bounceOffset.value = -25;
+        bounceOffset.value = withSpring(0, { damping: 4, stiffness: 180, mass: 0.6 });
+      }
+      if (previous !== null && previous > 0.1 && current <= 0.1) {
+        // Keyboard closing — small overshoot downward then settle
+        bounceOffset.value = 12;
+        bounceOffset.value = withSpring(0, { damping: 6, stiffness: 200, mass: 0.5 });
+      }
+    },
+  );
+
+  const contentAnimatedStyle = useAnimatedStyle(() => {
+    const baseTranslateY = interpolate(
+      progress.value,
+      [0, 1],
+      [0, keyboardHeight.value / 2.2],
+      Extrapolation.CLAMP,
+    );
+
+    return { transform: [{ translateY: baseTranslateY + bounceOffset.value }] };
+  });
+
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    const scale = withSpring(
+      interpolate(progress.value, [0, 1], [1, 0.85], Extrapolation.CLAMP),
+      { damping: 14, stiffness: 100 },
+    );
+    const opacity = withSpring(
+      interpolate(progress.value, [0, 0.5], [1, 0], Extrapolation.CLAMP),
+      { damping: 14, stiffness: 100 },
+    );
+
+    return { transform: [{ scale }], opacity };
+  });
+
+  const socialAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = withSpring(
+      interpolate(progress.value, [0, 0.3], [1, 0], Extrapolation.CLAMP),
+      { damping: 14, stiffness: 100 },
+    );
+    const maxHeight = interpolate(progress.value, [0, 1], [200, 0], Extrapolation.CLAMP);
+    const marginBottom = interpolate(
+      progress.value,
+      [0, 1],
+      [theme.spacing.lg, 0],
+      Extrapolation.CLAMP,
+    );
+
+    return { opacity, maxHeight, marginBottom, overflow: 'hidden' as const };
+  });
+
   const validateEmail = (email: string) => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(email.trim());
@@ -57,11 +124,10 @@ export default function LoginScreen({
     setLoading(true);
     try {
       const { error } = await signIn(trimmedEmail, trimmedPassword);
-      
+
       if (error) {
         Alert.alert('Login Failed', error.message);
       }
-      // Success - auth context will automatically update and navigate to app
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
@@ -94,7 +160,7 @@ export default function LoginScreen({
 
             try {
               const { error } = await AuthService.resetPassword(trimmedResetEmail);
-              
+
               if (error) {
                 Alert.alert('Error', error.message);
               } else {
@@ -110,7 +176,7 @@ export default function LoginScreen({
         },
       ],
       'plain-text',
-      email // Pre-fill with current email if available
+      email
     );
   };
 
@@ -125,26 +191,23 @@ export default function LoginScreen({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <Pressable style={styles.container} onPress={() => Keyboard.dismiss()}>
         {showBackButton && (
           <View style={styles.headerContainer}>
             <TouchableOpacity style={styles.backButton} onPress={onNavigateToSignup}>
-              <Text style={styles.backButtonText}>← Back</Text>
+              <Text style={styles.backButtonText}>{'\u2190'} Back</Text>
             </TouchableOpacity>
           </View>
         )}
-        <View style={styles.content}>
-          <View style={styles.header}>
+        <Animated.View style={[styles.content, contentAnimatedStyle]}>
+          <Animated.View style={[styles.header, headerAnimatedStyle]}>
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>
               Continue your philosophical journey
             </Text>
-          </View>
+          </Animated.View>
 
-          <View style={styles.divider}>
+          <Animated.View style={socialAnimatedStyle}>
             <TouchableOpacity
               style={[styles.button, styles.socialButton]}
               onPress={() => handleSocialSignIn('apple')}
@@ -162,7 +225,7 @@ export default function LoginScreen({
               {googleLogo ? <Image source={googleLogo} style={styles.socialIconImage} /> : null}
               <Text style={styles.socialButtonText}>Continue with Google</Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -215,11 +278,14 @@ export default function LoginScreen({
           >
             <Text style={styles.secondaryButtonText}>Create Account</Text>
           </TouchableOpacity>
-        </View>
-    </KeyboardAvoidingView>
+        </Animated.View>
+      </Pressable>
     </SafeAreaView>
   );
 }
+
+// Need Keyboard for dismiss
+import { Keyboard } from 'react-native';
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -312,6 +378,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: theme.spacing.lg,
   },
   dividerLine: {

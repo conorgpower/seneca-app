@@ -9,9 +9,14 @@ export const colors = {
   backgroundCard: '#3A3840',
   
   // Primary
-  primary: '#D4A574', // Gold/bronze accent
-  primaryDark: '#B8935E',
-  primaryLight: '#E8C9A0',
+  primary: '#DEAD5C',
+  primaryDark: '#C89A4A',
+  primaryLight: '#F2DFC0',
+
+  // Secondary & Tertiary
+  secondary: '#454449',
+  tertiary: '#F2DFC0',
+  quaternary: '#D9C9A8',
   
   // Text
   text: '#FFFFFF',
@@ -32,7 +37,7 @@ export const colors = {
   error: '#EF5350',
   
   // Tab bar
-  tabBarActive: '#D4A574',
+  tabBarActive: '#DEAD5C',
   tabBarInactive: '#707070',
   
   // Overlay

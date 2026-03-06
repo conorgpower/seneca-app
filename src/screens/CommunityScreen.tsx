@@ -8,10 +8,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   ImageBackground,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { PencilSquareIcon, LightBulbIcon, PlusIcon } from 'react-native-heroicons/solid';
 import { theme } from '../theme';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileDrawer from '../components/ProfileDrawer';
@@ -31,6 +33,7 @@ import {
 import type { CommunityReflection, Reflection } from '../types/reflection.types';
 import type { CommunityStackParamList } from '../navigation/CommunityNavigator';
 import { getSupabaseImageSource } from '../data/asset-cdn';
+import { AppBackground } from '../components/AppBackground';
 
 type NavigationProp = NativeStackNavigationProp<CommunityStackParamList, 'CommunityMain'>;
 
@@ -47,15 +50,19 @@ export default function CommunityScreen() {
   const liveLoadStartMsRef = React.useRef<number | null>(null);
   const loggedLiveLoadedRef = React.useRef(false);
   const liveBackgroundImage = getSupabaseImageSource('images/background-live-reflection.webp');
+  const waitingGif = getSupabaseImageSource('mascot/waiting-animated_nobg.gif');
 
   const userName = React.useMemo(() => {
     return user?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : 'User');
   }, [user?.user_metadata?.name, user?.email]);
 
   // Open drawer when returning from settings
-  useEffect(() => {
-    return drawerEvent.listen(() => setShowProfileDrawer(true));
-  }, []);
+  // Open drawer when returning from settings — only while this tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      return drawerEvent.listen(() => setShowProfileDrawer(true));
+    }, [])
+  );
 
   // Shared function to fetch data
   const fetchData = useCallback(async (source: string = 'unknown', attemptRepair: boolean = true) => {
@@ -220,7 +227,8 @@ export default function CommunityScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AppBackground>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
@@ -235,13 +243,13 @@ export default function CommunityScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <ProfileAvatar name={userName} onPress={() => setShowProfileDrawer(true)} />
+          <ProfileAvatar name={userName} avatarUrl={user?.user_metadata?.avatar_url} onPress={() => setShowProfileDrawer(true)} />
           <Text style={styles.title}>Community</Text>
           <TouchableOpacity
             style={styles.myReflectionsButton}
             onPress={() => navigation.navigate('MyReflections')}
           >
-            <Text style={styles.myReflectionsText}>✍️</Text>
+            <PencilSquareIcon size={22} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -315,9 +323,9 @@ export default function CommunityScreen() {
                   )}
                 </View>
               ) : (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>No live reflection at the moment</Text>
-                  <Text style={styles.emptySubtext}>Check back soon!</Text>
+                <View style={styles.emptyLiveCard}>
+                  <Text style={styles.emptyLiveText}>No live reflection right now</Text>
+                  <Text style={styles.emptyLiveSubtext}>Share a thought to get one started!</Text>
                 </View>
               )}
             </View>
@@ -346,15 +354,24 @@ export default function CommunityScreen() {
                 ))
               ) : (
                 <View style={styles.emptyCard}>
+                  {waitingGif && (
+                    <Image
+                      source={waitingGif}
+                      style={styles.emptyQueueGif}
+                    />
+                  )}
                   <Text style={styles.emptyText}>Queue is empty</Text>
-                  <Text style={styles.emptySubtext}>Be the first to share a thought!</Text>
+                  <Text style={styles.emptySubtext}>Be the first to share a Thought!</Text>
                 </View>
               )}
             </View>
 
             {/* Info Card */}
             <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>💡 Live Reflections</Text>
+              <View style={styles.infoTitleRow}>
+                <LightBulbIcon size={18} color={theme.colors.primary} />
+                <Text style={styles.infoTitle}>Live Reflections</Text>
+              </View>
               <Text style={styles.infoText}>
                 Share your thoughts and watch as they become Stoic reflections. Each reflection is
                 live for 60 seconds, creating a shared moment of wisdom with the community.
@@ -370,22 +387,21 @@ export default function CommunityScreen() {
         onPress={() => navigation.navigate('ShareThought')}
         activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>+</Text>
+        <PlusIcon size={28} color={theme.colors.background} />
       </TouchableOpacity>
 
       <ProfileDrawer visible={showProfileDrawer} onClose={() => setShowProfileDrawer(false)} />
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
     paddingBottom: 100, // Extra padding for FAB
@@ -431,7 +447,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.sizes.lg,
     fontWeight: '600',
     color: theme.colors.text,
-    marginBottom: 4,
+    marginBottom: theme.spacing.sm,
   },
   sectionSubtitle: {
     fontSize: theme.typography.sizes.sm,
@@ -518,11 +534,38 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: '600',
   },
-  emptyCard: {
-    backgroundColor: theme.colors.backgroundCard,
+  emptyLiveCard: {
+    backgroundColor: 'rgba(222, 173, 92, 0.08)',
     borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(222, 173, 92, 0.25)',
+    padding: theme.spacing.lg,
     alignItems: 'center',
+  },
+  emptyLiveText: {
+    fontSize: theme.typography.sizes.md,
+    color: theme.colors.text,
+    fontWeight: '600',
+    marginBottom: theme.spacing.xs,
+  },
+  emptyLiveSubtext: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.textSecondary,
+  },
+  emptyCard: {
+    backgroundColor: 'rgba(242, 223, 192, 0.18)',
+    borderRadius: theme.borderRadius.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.xl,
+    paddingTop: theme.spacing.sm,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: theme.colors.quaternary,
+  },
+  emptyQueueGif: {
+    width: 140,
+    height: 140,
+    marginBottom: theme.spacing.xs,
   },
   emptyText: {
     fontSize: theme.typography.sizes.md,
@@ -536,15 +579,22 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     marginHorizontal: theme.spacing.lg,
-    backgroundColor: theme.colors.backgroundCard,
+    backgroundColor: 'rgba(222, 173, 92, 0.08)',
     borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(222, 173, 92, 0.2)',
     padding: theme.spacing.lg,
+  },
+  infoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: theme.spacing.sm,
   },
   infoTitle: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '600',
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
   },
   infoText: {
     fontSize: theme.typography.sizes.sm,

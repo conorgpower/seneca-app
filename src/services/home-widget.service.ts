@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import { getSupabaseImageUrl } from '../data/asset-cdn';
 
 interface WisdomWidgetNativeModule {
   setWidgetQuotes: (
@@ -8,6 +9,10 @@ interface WisdomWidgetNativeModule {
     largeAuthor: string,
     lockQuoteText: string,
     lockAuthor: string
+  ) => void;
+  setWidgetBackgroundImages?: (
+    smallImageUrl: string,
+    largeImageUrl: string
   ) => void;
   // Backward compatibility for older native builds.
   setDailyQuote?: (quoteText: string, author: string) => void;
@@ -58,4 +63,36 @@ export function updateWisdomWidget(payload?: {
   }
 
   WisdomWidgetModule?.setDailyQuote?.(safeSmallQuote, safeSmallAuthor);
+}
+
+let bgImagesSent = false;
+
+export function updateWidgetBackgroundImages(): void {
+  console.log('[WidgetBG] updateWidgetBackgroundImages called');
+  console.log('[WidgetBG] Platform:', Platform.OS);
+  console.log('[WidgetBG] setWidgetBackgroundImages available:', !!WisdomWidgetModule?.setWidgetBackgroundImages);
+
+  if (Platform.OS !== 'ios' || !WisdomWidgetModule?.setWidgetBackgroundImages) {
+    console.log('[WidgetBG] Exiting: platform not iOS or native method not available');
+    return;
+  }
+
+  if (bgImagesSent) {
+    console.log('[WidgetBG] Exiting: already sent this session');
+    return;
+  }
+
+  const smallUrl = getSupabaseImageUrl('images/widget-small.webp');
+  const largeUrl = getSupabaseImageUrl('images/widget-large.webp');
+  console.log('[WidgetBG] smallUrl:', smallUrl);
+  console.log('[WidgetBG] largeUrl:', largeUrl);
+
+  if (!smallUrl || !largeUrl) {
+    console.log('[WidgetBG] Exiting: missing URL(s)');
+    return;
+  }
+
+  console.log('[WidgetBG] Calling native setWidgetBackgroundImages');
+  WisdomWidgetModule.setWidgetBackgroundImages(smallUrl, largeUrl);
+  bgImagesSent = true;
 }

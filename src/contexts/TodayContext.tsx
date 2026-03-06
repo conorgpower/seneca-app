@@ -1,15 +1,23 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import * as TodayService from '../services/today.service';
 import { getDailyPassage } from '../services/philosophical-passages.service';
 import type { PhilosophicalPassage } from '../services/philosophical-passages.service';
+import { getDailyQuote } from '../services/philosophical-quotes.service';
+import type { PhilosophicalQuote } from '../services/philosophical-quotes.service';
 import type {
   DailyCompletion,
   UserStreak,
   TodayProgress,
   WeeklyCompletion,
 } from '../types/today.types';
+
+const CACHE_KEY_QUOTE = '@seneca_cached_daily_quote';
+const CACHE_KEY_PROGRESS = '@seneca_cached_today_progress';
+const CACHE_KEY_STREAK = '@seneca_cached_streak';
+const CACHE_KEY_WEEKLY = '@seneca_cached_weekly';
 
 type TodayStage = 'check_in' | 'passage' | 'insight';
 
@@ -19,6 +27,7 @@ interface TodayContextType {
   todayCompletion: DailyCompletion | null;
   weeklyCompletions: WeeklyCompletion[];
   dailyPassage: PhilosophicalPassage | null;
+  dailyQuote: PhilosophicalQuote | null;
   loading: boolean;
   refreshProgress: () => Promise<void>;
   optimisticallyCompleteStage: (stage: TodayStage) => void;
@@ -34,9 +43,61 @@ export function TodayProvider({ children }: { children: React.ReactNode }) {
   const [todayCompletion, setTodayCompletion] = useState<DailyCompletion | null>(null);
   const [weeklyCompletions, setWeeklyCompletions] = useState<WeeklyCompletion[]>([]);
   const [dailyPassage, setDailyPassage] = useState<PhilosophicalPassage | null>(null);
+  const [dailyQuote, setDailyQuote] = useState<PhilosophicalQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const lastActiveDate = useRef<string>(new Date().toDateString());
   const midnightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const getLocalDateStr = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  };
+
+  // Load cached data from AsyncStorage on mount for instant UI
+  useEffect(() => {
+    const loadCache = async () => {
+      try {
+        const today = getLocalDateStr();
+        const [cachedQuoteRaw, cachedProgressRaw, cachedStreakRaw, cachedWeeklyRaw] = await Promise.all([
+          AsyncStorage.getItem(CACHE_KEY_QUOTE),
+          AsyncStorage.getItem(CACHE_KEY_PROGRESS),
+          AsyncStorage.getItem(CACHE_KEY_STREAK),
+          AsyncStorage.getItem(CACHE_KEY_WEEKLY),
+        ]);
+
+        if (cachedQuoteRaw) {
+          const cached = JSON.parse(cachedQuoteRaw);
+          if (cached.date === today && cached.data) {
+            setDailyQuote(cached.data);
+          }
+        }
+
+        if (cachedProgressRaw) {
+          const cached = JSON.parse(cachedProgressRaw);
+          if (cached.date === today && cached.data) {
+            setTodayProgress(cached.data);
+          }
+        }
+
+        if (cachedStreakRaw) {
+          const cached = JSON.parse(cachedStreakRaw);
+          if (cached.date === today && cached.data) {
+            setCurrentStreak(cached.data);
+          }
+        }
+
+        if (cachedWeeklyRaw) {
+          const cached = JSON.parse(cachedWeeklyRaw);
+          if (cached.date === today && cached.data) {
+            setWeeklyCompletions(cached.data);
+          }
+        }
+      } catch {
+        // Cache read failure is non-critical
+      }
+    };
+    loadCache();
+  }, []);
 
   /**
    * Load today's data from the database
@@ -49,12 +110,13 @@ export function TodayProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // Fetch all data in parallel, including the daily passage for instant navigation
-      const [progressResult, streakResult, completionResult, weeklyResult, passage] = await Promise.all([
+      const [progressResult, streakResult, completionResult, weeklyResult, passage, quote] = await Promise.all([
         TodayService.getTodayProgress(user.id),
         TodayService.getUserStreak(user.id),
         TodayService.getTodayCompletion(user.id),
         TodayService.getWeeklyCompletions(user.id),
         getDailyPassage(),
+        getDailyQuote(),
       ]);
 
       setTodayProgress(progressResult);
@@ -73,6 +135,31 @@ export function TodayProvider({ children }: { children: React.ReactNode }) {
 
       if (passage) {
         setDailyPassage(passage);
+      }
+
+      if (quote) {
+        setDailyQuote(quote);
+      }
+
+      // Persist to AsyncStorage for instant load on next cold start
+      const today = getLocalDateStr();
+      try {
+        const cacheOps: Promise<void>[] = [];
+        if (quote) {
+          cacheOps.push(AsyncStorage.setItem(CACHE_KEY_QUOTE, JSON.stringify({ date: today, data: quote })));
+        }
+        if (progressResult) {
+          cacheOps.push(AsyncStorage.setItem(CACHE_KEY_PROGRESS, JSON.stringify({ date: today, data: progressResult })));
+        }
+        if (streakResult.data) {
+          cacheOps.push(AsyncStorage.setItem(CACHE_KEY_STREAK, JSON.stringify({ date: today, data: streakResult.data })));
+        }
+        if (weeklyResult.data) {
+          cacheOps.push(AsyncStorage.setItem(CACHE_KEY_WEEKLY, JSON.stringify({ date: today, data: weeklyResult.data })));
+        }
+        await Promise.all(cacheOps);
+      } catch {
+        // Cache write failure is non-critical
       }
     } catch (error) {
       console.error('Error loading today data:', error);
@@ -205,6 +292,7 @@ export function TodayProvider({ children }: { children: React.ReactNode }) {
     todayCompletion,
     weeklyCompletions,
     dailyPassage,
+    dailyQuote,
     loading,
     refreshProgress,
     optimisticallyCompleteStage,

@@ -7,6 +7,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Share,
+  Dimensions,
+  ImageBackground,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,10 +23,16 @@ import * as PassageService from '../services/philosophical-passages.service';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import type { PhilosophicalPassage } from '../services/philosophical-passages.service';
 import { Ionicons } from '@expo/vector-icons';
+import { BookOpenIcon, ArrowRightIcon, ShareIcon, ChatBubbleLeftIcon } from 'react-native-heroicons/solid';
 import { triggerHaptic } from '../hooks/useAppPreferences';
+import { AnimatedMeshGradient } from '../components/AnimatedMeshGradient';
+import { getSupabaseImageSource } from '../data/asset-cdn';
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList, 'Passage'>;
 type PassageRouteProp = RouteProp<MainStackParamList, 'Passage'>;
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const PASSAGE_BG_IMAGE = getSupabaseImageSource('images/background-quote.webp');
 
 export default function PassageScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -43,6 +52,28 @@ export default function PassageScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const progress = todayProgress?.progressPercentage || 0;
+
+  // Adapt font size based on passage length and screen size
+  const getPassageTextStyle = () => {
+    const len = passage?.condensed_passage?.length || 0;
+    const isSmallScreen = SCREEN_HEIGHT < 700;
+
+    let fontSize = theme.typography.sizes.lg; // default ~18
+    let lineHeight = 30;
+
+    if (len > 400 || isSmallScreen) {
+      fontSize = 14;
+      lineHeight = 22;
+    } else if (len > 250) {
+      fontSize = 15;
+      lineHeight = 24;
+    } else if (len > 150) {
+      fontSize = 16;
+      lineHeight = 26;
+    }
+
+    return { fontSize, lineHeight };
+  };
 
   useEffect(() => {
     loadPassage();
@@ -76,9 +107,12 @@ export default function PassageScreen() {
 
   const handleChat = () => {
     if (!passage) return;
-    navigation.navigate('Chat' as any, {
-      initialContext: passage.condensed_passage,
-      initialMessage: `Help me understand this passage: "${passage.condensed_passage}"`,
+    navigation.navigate('App' as any, {
+      screen: 'Chat',
+      params: {
+        initialContext: passage.condensed_passage,
+        initialMessage: `Help me understand this passage: "${passage.condensed_passage}"`,
+      },
     });
   };
 
@@ -113,57 +147,55 @@ export default function PassageScreen() {
       .catch((err) => console.error('Error marking passage complete:', err));
   };
 
-  if (loading) {
-    return (
-      <LinearGradient
-        colors={['#4A90A4', '#5FA3B8', '#74B6CC']}
-        style={styles.gradientContainer}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-            <Text style={styles.loadingText}>Loading today's passage...</Text>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
-    );
-  }
+  const renderLoadingOrError = (message: string, isError?: boolean) => (
+    <View style={styles.container}>
+      <AnimatedMeshGradient
+        width={SCREEN_WIDTH}
+        height={SCREEN_HEIGHT}
+        borderRadius={0}
+        baseColors={['#1C1B1E', '#2A2520']}
+        blobColors={['#DEAD5C', '#8B7355']}
+        duration={10000}
+      />
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={styles.centeredContainer}>
+          {isError ? (
+            <>
+              <Text style={styles.errorText}>{message}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={loadPassage}>
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={styles.loadingText}>{message}</Text>
+            </>
+          )}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
 
-  if (!passage) {
-    return (
-      <LinearGradient
-        colors={['#4A90A4', '#5FA3B8', '#74B6CC']}
-        style={styles.gradientContainer}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>No passage available</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadPassage}>
-              <Text style={styles.retryButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
-    );
-  }
+  if (loading) return renderLoadingOrError('Loading today\'s passage...');
+  if (!passage) return renderLoadingOrError('No passage available', true);
 
   return (
-    <LinearGradient
-      colors={['#4A90A4', '#5FA3B8', '#74B6CC']}
-      style={styles.gradientContainer}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
+    <View style={styles.container}>
+      <AnimatedMeshGradient
+        width={SCREEN_WIDTH}
+        height={SCREEN_HEIGHT}
+        borderRadius={0}
+        baseColors={['#1C1B1E', '#2A2520']}
+        blobColors={['#DEAD5C', '#8B7355']}
+        duration={10000}
+      />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.headerSection}>
           <Text style={styles.headerTitle}>Today's Journey</Text>
           <TouchableOpacity style={styles.closeButton} onPress={() => navigation.popToTop()}>
-            <Ionicons name="close" size={28} color="rgba(0, 0, 0, 0.7)" />
+            <Ionicons name="close" size={28} color="rgba(255, 255, 255, 0.8)" />
           </TouchableOpacity>
         </View>
 
@@ -185,7 +217,7 @@ export default function PassageScreen() {
 
         {/* Journey Label */}
         <View style={styles.journeyLabelContainer}>
-          <Text style={styles.journeyIcon}>📖</Text>
+          <BookOpenIcon size={18} color="rgba(255, 255, 255, 0.85)" />
           <Text style={styles.journeyLabel}>PASSAGE OF THE DAY</Text>
           <Text style={styles.journeyDuration}>• 1 MIN</Text>
         </View>
@@ -196,46 +228,63 @@ export default function PassageScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.passageCard}>
-            <Text style={styles.passageText}>{passage.condensed_passage}</Text>
-            <View style={styles.attribution}>
-              <Text style={styles.attributionText}>— {passage.source_author}</Text>
-              <Text style={styles.workText}>{passage.source_work}</Text>
+          {PASSAGE_BG_IMAGE ? (
+            <View style={styles.passageCard}>
+              <Image
+                source={PASSAGE_BG_IMAGE}
+                style={styles.passageCardImage}
+              />
+              <View style={styles.passageCardOverlay}>
+                <Text style={[styles.passageText, getPassageTextStyle()]}>{passage.condensed_passage}</Text>
+                <View style={styles.attribution}>
+                  <Text style={styles.attributionText}>— {passage.source_author}</Text>
+                  <Text style={styles.workText}>{passage.source_work}</Text>
+                </View>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View style={[styles.passageCard, styles.passageCardFallback]}>
+              <Text style={[styles.passageText, getPassageTextStyle()]}>{passage.condensed_passage}</Text>
+              <View style={styles.attribution}>
+                <Text style={styles.attributionText}>— {passage.source_author}</Text>
+                <Text style={styles.workText}>{passage.source_work}</Text>
+              </View>
+            </View>
+          )}
         </ScrollView>
 
         {/* Bottom Action Bar */}
         <View style={styles.bottomBar}>
           <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
-            <Ionicons name="share-outline" size={22} color="#FFFFFF" />
+            <ShareIcon size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.chatButton} onPress={handleChat}>
-            <Ionicons name="chatbubble-outline" size={16} color="#FFFFFF" />
+            <ChatBubbleLeftIcon size={16} color="#FFFFFF" />
             <Text style={styles.chatButtonText}>Chat to Learn More</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.iconButton, submitting && styles.iconButtonDisabled]}
+            style={[styles.nextButton, submitting && styles.nextButtonDisabled]}
             onPress={handleContinue}
             disabled={submitting}
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={theme.colors.background} />
             ) : (
-              <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
+              <ArrowRightIcon size={20} color={theme.colors.background} />
             )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradientContainer: {
+  container: {
     flex: 1,
+    backgroundColor: '#1C1B1E',
   },
   safeArea: {
     flex: 1,
@@ -250,7 +299,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: theme.typography.sizes.xxl,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   closeButton: {
     position: 'absolute',
@@ -259,7 +311,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -277,7 +329,10 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   progressPercentage: {
     fontSize: theme.typography.sizes.sm,
@@ -286,7 +341,7 @@ const styles = StyleSheet.create({
   },
   progressBarTrack: {
     height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -302,61 +357,86 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     gap: 6,
   },
-  journeyIcon: {
-    fontSize: 18,
-  },
   journeyLabel: {
     fontSize: theme.typography.sizes.xs,
     fontWeight: 'bold',
-    color: 'rgba(0, 0, 0, 0.8)',
+    color: 'rgba(255, 255, 255, 0.85)',
     letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   journeyDuration: {
     fontSize: theme.typography.sizes.xs,
-    color: 'rgba(0, 0, 0, 0.6)',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.lg,
     flexGrow: 1,
     justifyContent: 'center',
   },
   passageCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: theme.borderRadius.xl,
-    padding: theme.spacing.xl,
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: 6,
+  },
+  passageCardImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+    borderRadius: theme.borderRadius.lg,
+  },
+  passageCardOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  passageCardFallback: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: theme.spacing.xl,
   },
   passageText: {
     fontSize: theme.typography.sizes.lg,
     lineHeight: 30,
-    color: '#000000',
+    color: '#FFFFFF',
     marginBottom: theme.spacing.lg,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   attribution: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
     paddingTop: theme.spacing.md,
     alignItems: 'center',
   },
   attributionText: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFFFFF',
     marginBottom: theme.spacing.xs,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   workText: {
     fontSize: theme.typography.sizes.sm,
     fontStyle: 'italic',
-    color: 'rgba(0, 0, 0, 0.6)',
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   bottomBar: {
     flexDirection: 'row',
@@ -366,25 +446,26 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
     gap: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
   iconButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconButtonDisabled: {
-    opacity: 0.5,
   },
   chatButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing.sm + 4,
     gap: 6,
@@ -394,21 +475,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  loadingContainer: {
+  nextButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  nextButtonDisabled: {
+    opacity: 0.5,
+  },
+  centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
   },
   loadingText: {
     fontSize: theme.typography.sizes.md,
     color: '#FFFFFF',
     marginTop: theme.spacing.md,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
   },
   errorText: {
     fontSize: theme.typography.sizes.lg,
@@ -416,7 +508,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   retryButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,

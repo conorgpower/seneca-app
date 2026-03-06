@@ -11,13 +11,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import { ListBulletIcon, BookOpenIcon, XMarkIcon, CheckIcon, ChevronLeftIcon } from 'react-native-heroicons/solid';
 import { theme } from '../theme';
+import { AppBackground } from '../components/AppBackground';
 import { BOOKS } from '../data/works-metadata';
 import {
   getTableOfContents,
   getSectionText,
   TableOfContentsSection,
 } from '../services/philosophical-texts.service';
+import { useAchievementCheck } from '../hooks/useAchievementCheck';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +31,7 @@ type BookReaderParams = {
 export default function BookReaderScreen() {
   const route = useRoute<RouteProp<{ params: BookReaderParams }, 'params'>>();
   const navigation = useNavigation();
+  const { logContentAndCheck } = useAchievementCheck();
   const { workId } = route.params;
 
   // Parse workId: "Author:Title"
@@ -59,7 +63,9 @@ export default function BookReaderScreen() {
       console.error('Book not found in metadata');
       return;
     }
-    
+
+    logContentAndCheck('book', workId);
+
     console.log('Loading work data for:', book.title, 'by', book.author);
     
     try {
@@ -135,6 +141,7 @@ export default function BookReaderScreen() {
 
   if (!book) {
     return (
+      <AppBackground>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <Text style={styles.errorText}>Book not found</Text>
@@ -146,18 +153,20 @@ export default function BookReaderScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+      </AppBackground>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AppBackground>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.headerButtonText}>← Back</Text>
+          <ChevronLeftIcon size={22} color={theme.colors.primary} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -168,10 +177,10 @@ export default function BookReaderScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.headerButton}
+          style={styles.tocButton}
           onPress={() => setShowTOC(true)}
         >
-          <Text style={styles.headerButtonText}>📑</Text>
+          <ListBulletIcon size={22} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -268,9 +277,12 @@ export default function BookReaderScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Table of Contents</Text>
-              <TouchableOpacity onPress={() => setShowTOC(false)}>
-                <Text style={styles.modalClose}>✕</Text>
+              <View style={styles.modalTitleRow}>
+                <BookOpenIcon size={20} color={theme.colors.primary} />
+                <Text style={styles.modalTitle}>Table of Contents</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowTOC(false)} style={styles.modalCloseButton}>
+                <XMarkIcon size={20} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -304,14 +316,19 @@ export default function BookReaderScreen() {
                       }}
                     >
                       <View style={styles.tocItemContent}>
-                        <Text
-                          style={[
-                            styles.tocItemNumber,
-                            item.section === currentSection && styles.tocItemTextActive,
-                          ]}
-                        >
-                          {index + 1}
-                        </Text>
+                        <View style={[
+                          styles.tocItemNumberBadge,
+                          item.section === currentSection && styles.tocItemNumberBadgeActive,
+                        ]}>
+                          <Text
+                            style={[
+                              styles.tocItemNumber,
+                              item.section === currentSection && styles.tocItemNumberActive,
+                            ]}
+                          >
+                            {index + 1}
+                          </Text>
+                        </View>
                         <Text
                           style={[
                             styles.tocItemTitle,
@@ -323,7 +340,7 @@ export default function BookReaderScreen() {
                         </Text>
                       </View>
                       {item.section === currentSection && (
-                        <Text style={styles.tocItemCheck}>✓</Text>
+                        <CheckIcon size={18} color={theme.colors.primary} />
                       )}
                     </TouchableOpacity>
                   );
@@ -334,13 +351,13 @@ export default function BookReaderScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -380,7 +397,13 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: theme.spacing.sm,
-    minWidth: 60,
+    width: 40,
+    alignItems: 'flex-start',
+  },
+  tocButton: {
+    padding: theme.spacing.sm,
+    width: 40,
+    alignItems: 'flex-end',
   },
   headerButtonText: {
     color: theme.colors.primary,
@@ -509,9 +532,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.text,
   },
-  modalClose: {
-    fontSize: theme.typography.sizes.xl,
-    color: theme.colors.textSecondary,
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  modalCloseButton: {
     padding: theme.spacing.sm,
   },
   tocList: {
@@ -556,12 +582,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  tocItemNumber: {
-    fontSize: theme.typography.sizes.sm,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  tocItemNumberBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: theme.spacing.md,
-    minWidth: 30,
+  },
+  tocItemNumberBadgeActive: {
+    backgroundColor: theme.colors.primary + '30',
+  },
+  tocItemNumber: {
+    fontSize: theme.typography.sizes.xs,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  tocItemNumberActive: {
+    color: theme.colors.primary,
   },
   tocItemTitle: {
     fontSize: theme.typography.sizes.md,
@@ -572,8 +611,6 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   tocItemCheck: {
-    fontSize: theme.typography.sizes.lg,
-    color: theme.colors.primary,
     marginLeft: theme.spacing.sm,
   },
 });

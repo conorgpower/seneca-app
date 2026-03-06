@@ -1,19 +1,32 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { theme } from '../theme';
+
+import {
+  ChatBubbleLeftIcon as ChatOutline,
+  UserGroupIcon as CommunityOutline,
+  CalendarDaysIcon as TodayOutline,
+  LockClosedIcon as FocusOutline,
+  BookOpenIcon as ExploreOutline,
+} from 'react-native-heroicons/outline';
+import {
+  ChatBubbleLeftIcon as ChatSolid,
+  UserGroupIcon as CommunitySolid,
+  CalendarDaysIcon as TodaySolid,
+  LockClosedIcon as FocusSolid,
+  BookOpenIcon as ExploreSolid,
+} from 'react-native-heroicons/solid';
 
 import ChatScreen from '../screens/ChatScreen';
 import CommunityNavigator from './CommunityNavigator';
 import TodayNavigator from './TodayNavigator';
+import FocusLockScreen from '../screens/FocusLockScreen';
 import ExploreNavigator from './ExploreNavigator';
 
 const Tab = createBottomTabNavigator();
 
-// Simple icon component using emoji
-const TabIcon = ({ emoji, focused }: { emoji: string; focused: boolean }) => (
-  <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>{emoji}</Text>
-);
+const ICON_SIZE = 24;
 
 export default function AppNavigator() {
   return (
@@ -34,7 +47,12 @@ export default function AppNavigator() {
         name="Chat"
         component={ChatScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon emoji="💬" focused={focused} />,
+          tabBarIcon: ({ focused }) =>
+            focused ? (
+              <ChatSolid size={ICON_SIZE} color={theme.colors.tabBarActive} />
+            ) : (
+              <ChatOutline size={ICON_SIZE} color={theme.colors.tabBarInactive} />
+            ),
           headerShown: false,
         }}
       />
@@ -42,7 +60,12 @@ export default function AppNavigator() {
         name="Community"
         component={CommunityNavigator}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon emoji="👥" focused={focused} />,
+          tabBarIcon: ({ focused }) =>
+            focused ? (
+              <CommunitySolid size={ICON_SIZE} color={theme.colors.tabBarActive} />
+            ) : (
+              <CommunityOutline size={ICON_SIZE} color={theme.colors.tabBarInactive} />
+            ),
           headerShown: false,
         }}
       />
@@ -50,7 +73,25 @@ export default function AppNavigator() {
         name="Today"
         component={TodayNavigator}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📅" focused={focused} />,
+          tabBarIcon: ({ focused }) =>
+            focused ? (
+              <TodaySolid size={ICON_SIZE} color={theme.colors.tabBarActive} />
+            ) : (
+              <TodayOutline size={ICON_SIZE} color={theme.colors.tabBarInactive} />
+            ),
+          headerShown: false,
+        }}
+      />
+      <Tab.Screen
+        name="Focus"
+        component={FocusLockScreen}
+        options={{
+          tabBarIcon: ({ focused }) =>
+            focused ? (
+              <FocusSolid size={ICON_SIZE} color={theme.colors.tabBarActive} />
+            ) : (
+              <FocusOutline size={ICON_SIZE} color={theme.colors.tabBarInactive} />
+            ),
           headerShown: false,
         }}
       />
@@ -58,7 +99,12 @@ export default function AppNavigator() {
         name="Explore"
         component={ExploreNavigator}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
+          tabBarIcon: ({ focused }) =>
+            focused ? (
+              <ExploreSolid size={ICON_SIZE} color={theme.colors.tabBarActive} />
+            ) : (
+              <ExploreOutline size={ICON_SIZE} color={theme.colors.tabBarInactive} />
+            ),
           headerShown: false,
         }}
       />
@@ -81,12 +127,6 @@ const styles = StyleSheet.create({
   tabBarLabel: {
     fontSize: 12,
     fontWeight: '500',
-  },
-  tabIcon: {
-    fontSize: 24,
-  },
-  tabIconFocused: {
-    transform: [{ scale: 1.1 }],
   },
   header: {
     backgroundColor: theme.colors.background,

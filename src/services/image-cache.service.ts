@@ -11,6 +11,10 @@ const BACKGROUND_IMAGE_PATHS = [
   'images/background-quote.webp',
   'images/background-quote-2.webp',
   'images/background-live-reflection.webp',
+  'mascot/waiting-animated_nobg.gif',
+  'mascot/writing-animated_nobg.gif',
+  'mascot/thinking-animated_nobg.gif',
+  'gifs/lock_nobg.gif',
 ];
 
 const TODAY_SCREEN_IMAGE_PATHS = [
@@ -18,7 +22,10 @@ const TODAY_SCREEN_IMAGE_PATHS = [
   'images/background-quote-2.webp',
 ];
 
-const CHAT_SCREEN_IMAGE_PATHS = ['images/background-quote.webp'];
+const CHAT_SCREEN_IMAGE_PATHS = [
+  'images/background-quote.webp',
+  'mascot/writing-animated_nobg.gif',
+];
 
 const ONBOARDING_FLOW_IMAGE_PATHS = [
   'images/comic/seneca.webp',
@@ -249,9 +256,16 @@ export function startSignedInPriorityWarmup(
   let stopped = false;
   const startedAt = Date.now();
 
-  const phases: Array<{ name: 'today' | 'chat' | 'comics'; paths: string[] }> = [
+  const COMMUNITY_SCREEN_IMAGE_PATHS = [
+    'images/background-live-reflection.webp',
+    'mascot/waiting-animated_nobg.gif',
+    'mascot/thinking-animated_nobg.gif',
+  ];
+
+  const phases: Array<{ name: 'today' | 'chat' | 'community' | 'comics'; paths: string[] }> = [
     { name: 'today', paths: TODAY_SCREEN_IMAGE_PATHS },
     { name: 'chat', paths: CHAT_SCREEN_IMAGE_PATHS },
+    { name: 'community', paths: COMMUNITY_SCREEN_IMAGE_PATHS },
     { name: 'comics', paths: getAllComicImagePaths() },
   ];
 

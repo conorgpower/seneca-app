@@ -3,6 +3,13 @@ import { ScrollView, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import {
+  SwatchIcon,
+  SpeakerWaveIcon,
+  HandRaisedIcon,
+  LanguageIcon,
+} from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 import { updateCachedPrefs } from '../../hooks/useAppPreferences';
 
@@ -49,6 +56,7 @@ export default function AppearanceSettingsScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -59,7 +67,7 @@ export default function AppearanceSettingsScreen() {
         <SettingsRow
           type="value"
           label="Appearance"
-          icon="🎨"
+          icon={<SwatchIcon size={20} color={theme.colors.tertiary} />}
           value="Dark"
           onPress={() => {
             Alert.alert('Coming Soon', 'Light and system themes will be available in a future update.');
@@ -72,7 +80,7 @@ export default function AppearanceSettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Sound Effects"
-          icon="🔊"
+          icon={<SpeakerWaveIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.soundEnabled}
           onValueChange={(v) => savePrefs({ ...prefs, soundEnabled: v })}
           isFirst
@@ -80,7 +88,7 @@ export default function AppearanceSettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Haptic Feedback"
-          icon="📳"
+          icon={<HandRaisedIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.hapticsEnabled}
           onValueChange={(v) => savePrefs({ ...prefs, hapticsEnabled: v })}
           isLast
@@ -90,7 +98,7 @@ export default function AppearanceSettingsScreen() {
         <SettingsRow
           type="value"
           label="Text Size"
-          icon="🔤"
+          icon={<LanguageIcon size={20} color={theme.colors.tertiary} />}
           value="System Default"
           onPress={() => {
             Alert.alert('Coming Soon', 'Custom text sizing will be available in a future update.');
@@ -100,13 +108,13 @@ export default function AppearanceSettingsScreen() {
         />
       </ScrollView>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,

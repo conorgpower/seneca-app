@@ -51,7 +51,6 @@ class WisdomWidgetModule: NSObject {
   }
 
   @objc func setDailyQuote(_ quoteText: String, author: String) {
-    // Backward compatibility: mirror the same quote across all widget families.
     setWidgetQuotes(
       quoteText,
       smallAuthor: author,
@@ -60,6 +59,92 @@ class WisdomWidgetModule: NSObject {
       lockQuoteText: quoteText,
       lockAuthor: author
     )
+  }
+
+  @objc func setWidgetBackgroundImages(
+    _ smallImageUrl: String,
+    largeImageUrl: String
+  ) {
+    NSLog("[WidgetBG-Native] setWidgetBackgroundImages called")
+    NSLog("[WidgetBG-Native] smallUrl: %@", smallImageUrl)
+    NSLog("[WidgetBG-Native] largeUrl: %@", largeImageUrl)
+
+    guard let containerUrl = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: suiteName
+    ) else {
+      NSLog("[WidgetBG-Native] ERROR: Could not get App Group container URL")
+      return
+    }
+
+    NSLog("[WidgetBG-Native] Container path: %@", containerUrl.path)
+
+    let smallDest = containerUrl.appendingPathComponent("widget_bg_small.png")
+    let largeDest = containerUrl.appendingPathComponent("widget_bg_large.png")
+
+    DispatchQueue.global(qos: .utility).async {
+      self.downloadImage(from: smallImageUrl, to: smallDest)
+      self.downloadImage(from: largeImageUrl, to: largeDest)
+
+      let smallExists = FileManager.default.fileExists(atPath: smallDest.path)
+      let largeExists = FileManager.default.fileExists(atPath: largeDest.path)
+      NSLog("[WidgetBG-Native] After download - small exists: %d, large exists: %d", smallExists, largeExists)
+
+      let defaults = UserDefaults(suiteName: self.suiteName)
+      defaults?.set(true, forKey: "widget_bg_images_available")
+      defaults?.set(Date(), forKey: "widget_bg_updated_at")
+
+      if #available(iOS 14.0, *) {
+        WidgetCenter.shared.reloadAllTimelines()
+        NSLog("[WidgetBG-Native] Reloaded all timelines")
+      }
+    }
+  }
+
+  private func downloadImage(from urlString: String, to destination: URL) {
+    guard let url = URL(string: urlString) else {
+      NSLog("[WidgetBG-Native] ERROR: Invalid URL: %@", urlString)
+      return
+    }
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var downloadError: Error?
+
+    let task = URLSession.shared.dataTask(with: url) { data, response, error in
+      defer { semaphore.signal() }
+
+      if let error = error {
+        NSLog("[WidgetBG-Native] ERROR network: %@", error.localizedDescription)
+        downloadError = error
+        return
+      }
+
+      if let httpResponse = response as? HTTPURLResponse {
+        NSLog("[WidgetBG-Native] HTTP status: %d for %@", httpResponse.statusCode, urlString)
+        if httpResponse.statusCode != 200 {
+          NSLog("[WidgetBG-Native] ERROR: Non-200 status code")
+          return
+        }
+      }
+
+      guard let data = data, !data.isEmpty else {
+        NSLog("[WidgetBG-Native] ERROR: No data received from %@", urlString)
+        return
+      }
+
+      NSLog("[WidgetBG-Native] Downloaded %d bytes from %@", data.count, urlString)
+      do {
+        try data.write(to: destination, options: .atomic)
+        NSLog("[WidgetBG-Native] Wrote to %@", destination.path)
+      } catch {
+        NSLog("[WidgetBG-Native] ERROR writing file: %@", error.localizedDescription)
+      }
+    }
+    task.resume()
+    semaphore.wait()
+
+    if let err = downloadError {
+      NSLog("[WidgetBG-Native] Download failed for %@: %@", urlString, err.localizedDescription)
+    }
   }
 }
 `;
@@ -76,6 +161,9 @@ RCT_EXTERN_METHOD(setWidgetQuotes:(NSString *)smallQuoteText
                   lockAuthor:(NSString *)lockAuthor)
 
 RCT_EXTERN_METHOD(setDailyQuote:(NSString *)quoteText author:(NSString *)author)
+
+RCT_EXTERN_METHOD(setWidgetBackgroundImages:(NSString *)smallImageUrl
+                  largeImageUrl:(NSString *)largeImageUrl)
 
 + (BOOL)requiresMainQueueSetup
 {
@@ -242,7 +330,7 @@ struct WisdomWidgetModuleEntryView: View {
     return trimmed.isEmpty ? "Marcus Aurelius" : trimmed
   }
 
-  private var homeWidgetBackground: some View {
+  private var gradientFallback: some View {
     LinearGradient(
       colors: [Color(red: 0.20, green: 0.20, blue: 0.22), Color(red: 0.06, green: 0.06, blue: 0.08)],
       startPoint: .topLeading,
@@ -250,26 +338,61 @@ struct WisdomWidgetModuleEntryView: View {
     )
   }
 
+  private func loadWidgetImage(named filename: String) -> UIImage? {
+    guard let containerUrl = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: appGroupSuite
+    ) else {
+      NSLog("[WidgetBG-Ext] ERROR: Could not get App Group container")
+      return nil
+    }
+    let fileUrl = containerUrl.appendingPathComponent(filename)
+    let exists = FileManager.default.fileExists(atPath: fileUrl.path)
+    NSLog("[WidgetBG-Ext] Loading %@ - exists: %d, path: %@", filename, exists, fileUrl.path)
+    guard exists else { return nil }
+    let image = UIImage(contentsOfFile: fileUrl.path)
+    NSLog("[WidgetBG-Ext] UIImage loaded: %d, size: %@", image != nil, image != nil ? "\\(image!.size)" : "nil")
+    return image
+  }
+
+  @ViewBuilder
+  private var homeWidgetBackground: some View {
+    let imageName = family == .systemSmall ? "widget_bg_small.png" : "widget_bg_large.png"
+    if let uiImage = loadWidgetImage(named: imageName) {
+      Image(uiImage: uiImage)
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+    } else {
+      gradientFallback
+    }
+  }
+
   private var homeWidgetTextContent: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    let isSmall = family == .systemSmall
+    return VStack(alignment: .leading, spacing: isSmall ? 6 : 8) {
       Text("Wisdom of the Day")
-        .font(.system(size: 14, weight: .semibold))
-        .foregroundStyle(.white.opacity(0.90))
+        .font(.system(size: isSmall ? 11 : 14, weight: .bold))
+        .foregroundStyle(.white)
         .lineLimit(1)
+        .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 2)
 
       Text("\\"\\(displayQuote)\\"")
-        .font(.system(size: 15, weight: .medium, design: .serif))
+        .font(.system(size: isSmall ? 13 : 15, weight: .semibold, design: .serif))
         .foregroundStyle(.white)
-        .lineLimit(4)
+        .lineLimit(isSmall ? 3 : 4)
+        .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 2)
 
       Spacer(minLength: 0)
 
       Text(displayAuthor)
-        .font(.system(size: 13, weight: .regular))
-        .foregroundStyle(.white.opacity(0.82))
+        .font(.system(size: isSmall ? 11 : 13, weight: .bold))
+        .foregroundStyle(.white)
         .lineLimit(1)
+        .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.5), radius: 6, x: 0, y: 2)
     }
-    .padding(16)
+    .padding(isSmall ? 12 : 16)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 

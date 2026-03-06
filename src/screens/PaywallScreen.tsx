@@ -18,6 +18,7 @@ import { useSubscription } from '../hooks/useSubscription';
 import { trackOnboardingScreenView } from '../services/mixpanel.service';
 import { TERMS, PRIVACY } from '../utils/legalContent';
 import { getSupabaseImageSource } from '../data/asset-cdn';
+import { AppBackground } from '../components/AppBackground';
 
 const { width } = Dimensions.get('window');
 
@@ -157,8 +158,8 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
     trackOnboardingScreenView({
       screenName: `paywall_step_${step}`,
       flowStep: 'paywall',
-      overallStep: 24,
-      totalSteps: 24,
+      overallStep: 25,
+      totalSteps: 25,
     }).catch((error) => {
       console.error('Failed to track paywall step view:', error);
     });
@@ -441,6 +442,7 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
   );
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.topBar}>
@@ -511,6 +513,7 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
@@ -558,11 +561,9 @@ function renderMarkdown(text: string) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   topBar: {
     flexDirection: 'row',

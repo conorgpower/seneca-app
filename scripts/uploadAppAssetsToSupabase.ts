@@ -34,7 +34,7 @@ async function walk(dir: string): Promise<string[]> {
 }
 
 function isSupportedAsset(filePath: string): boolean {
-  return /\.(png|jpg|jpeg|webp|mp3|m4a|wav)$/i.test(filePath);
+  return /\.(png|jpg|jpeg|webp|gif|mp3|m4a|wav)$/i.test(filePath);
 }
 
 function getContentType(filePath: string): string {
@@ -47,6 +47,8 @@ function getContentType(filePath: string): string {
       return 'image/jpeg';
     case '.webp':
       return 'image/webp';
+    case '.gif':
+      return 'image/gif';
     case '.mp3':
       return 'audio/mpeg';
     case '.m4a':
@@ -67,6 +69,8 @@ function getContentTypeFromExt(ext: string): string {
       return 'image/jpeg';
     case '.webp':
       return 'image/webp';
+    case '.gif':
+      return 'image/gif';
     case '.mp3':
       return 'audio/mpeg';
     case '.m4a':
@@ -320,10 +324,26 @@ async function main() {
   if (!SUPABASE_ANON_KEY) throw new Error('Missing SUPABASE_ANON_KEY in environment.');
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const singleFileArg = process.argv[2];
   const localAssetsExist = await exists(ASSETS_DIR);
   let relativePaths: string[] = [];
 
-  if (localAssetsExist) {
+  if (singleFileArg) {
+    const fullPath = path.resolve(singleFileArg);
+    const stat = await fs.stat(fullPath);
+    if (stat.isDirectory()) {
+      const files = (await walk(fullPath)).filter(isSupportedAsset);
+      relativePaths = files.map((f) => path.relative(ASSETS_DIR, f).split(path.sep).join('/'));
+      console.log(`Uploading ${relativePaths.length} assets from '${fullPath}' to bucket '${BUCKET}'...`);
+    } else {
+      if (!isSupportedAsset(fullPath)) {
+        throw new Error(`Unsupported file type: ${fullPath}`);
+      }
+      const relativePath = path.relative(ASSETS_DIR, fullPath).split(path.sep).join('/');
+      relativePaths = [relativePath];
+      console.log(`Uploading single asset to bucket '${BUCKET}'...`);
+    }
+  } else if (localAssetsExist) {
     const files = (await walk(ASSETS_DIR)).filter(isSupportedAsset);
     relativePaths = files.map((fullPath) => path.relative(ASSETS_DIR, fullPath).split(path.sep).join('/'));
     console.log(`Uploading ${relativePaths.length} local assets from '${ASSETS_DIR}' to bucket '${BUCKET}'...`);

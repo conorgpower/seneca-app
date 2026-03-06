@@ -12,9 +12,12 @@ export default {
     scheme: 'senecaapp',
     ios: {
       supportsTablet: true,
+      buildNumber: '1',
       bundleIdentifier: 'com.depaorgroup.seneca',
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSPhotoLibraryUsageDescription: 'Allow Seneca to access your photos to set a profile picture.',
+        NSCameraUsageDescription: 'Allow Seneca to use your camera to take a profile picture.',
       },
       icon: './assets/icon.png',
     },
@@ -44,6 +47,22 @@ export default {
                     'com.apple.security.application-groups': ['group.com.depaorgroup.seneca'],
                   },
                 },
+                {
+                  targetName: 'SenecaShieldConfig',
+                  bundleIdentifier: 'com.depaorgroup.seneca.SenecaShieldConfig',
+                  entitlements: {
+                    'com.apple.security.application-groups': ['group.com.depaorgroup.seneca'],
+                    'com.apple.developer.family-controls': true,
+                  },
+                },
+                {
+                  targetName: 'SenecaShieldAction',
+                  bundleIdentifier: 'com.depaorgroup.seneca.SenecaShieldAction',
+                  entitlements: {
+                    'com.apple.security.application-groups': ['group.com.depaorgroup.seneca'],
+                    'com.apple.developer.family-controls': true,
+                  },
+                },
               ],
             },
           },
@@ -66,6 +85,21 @@ export default {
       'expo-apple-authentication',
       './plugins/withCustomSplash',
       './plugins/withWisdomWidget',
+      './plugins/withFocusLock',
+      [
+        'expo-speech-recognition',
+        {
+          microphonePermission: 'Allow Seneca to use your microphone for voice input.',
+          speechRecognitionPermission: 'Allow Seneca to recognise your speech for voice input.',
+        },
+      ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'Allow Seneca to access your photos to set a profile picture.',
+          cameraPermission: 'Allow Seneca to use your camera to take a profile picture.',
+        },
+      ],
     ],
   },
 };

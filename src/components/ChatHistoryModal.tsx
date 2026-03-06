@@ -10,6 +10,17 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  FireIcon,
+  SparklesIcon,
+  RocketLaunchIcon,
+  BoltIcon,
+  LightBulbIcon,
+  BuildingLibraryIcon,
+  ChatBubbleLeftIcon,
+  ChatBubbleOvalLeftEllipsisIcon,
+  XMarkIcon,
+} from 'react-native-heroicons/solid';
 import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -105,22 +116,23 @@ export default function ChatHistoryModal({
     }
   };
 
-  const getPromptIcon = (promptType?: string): string => {
+  const getPromptIcon = (promptType?: string) => {
+    const iconProps = { size: 24, color: theme.colors.primary };
     switch (promptType) {
       case 'Dealing with adversity':
-        return '💪';
+        return <FireIcon {...iconProps} />;
       case 'Finding inner peace':
-        return '🧘';
+        return <SparklesIcon {...iconProps} />;
       case 'Living with purpose':
-        return '🎯';
+        return <RocketLaunchIcon {...iconProps} />;
       case 'Overcoming fear':
-        return '⚡';
+        return <BoltIcon {...iconProps} />;
       case 'Daily wisdom':
-        return '📖';
+        return <LightBulbIcon {...iconProps} />;
       case 'Building character':
-        return '🏛️';
+        return <BuildingLibraryIcon {...iconProps} />;
       default:
-        return '💬';
+        return <ChatBubbleLeftIcon {...iconProps} />;
     }
   };
 
@@ -135,7 +147,7 @@ export default function ChatHistoryModal({
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <Text style={styles.promptIcon}>{getPromptIcon(item.promptType)}</Text>
+          {getPromptIcon(item.promptType)}
         </View>
         <View style={styles.conversationContent}>
           <Text style={styles.conversationTitle} numberOfLines={2}>
@@ -150,7 +162,7 @@ export default function ChatHistoryModal({
           onPress={() => handleDelete(item.id, item.title)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={styles.deleteButtonText}>×</Text>
+          <XMarkIcon size={16} color={theme.colors.error} />
         </TouchableOpacity>
       </TouchableOpacity>
     </View>
@@ -177,7 +189,7 @@ export default function ChatHistoryModal({
           </View>
         ) : conversations.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>💭</Text>
+            <ChatBubbleOvalLeftEllipsisIcon size={64} color={theme.colors.textTertiary} style={{ marginBottom: 16 }} />
             <Text style={styles.emptyTitle}>No conversations yet</Text>
             <Text style={styles.emptyText}>
               Start a new chat to begin your philosophical journey
@@ -237,10 +249,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
@@ -291,9 +299,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  promptIcon: {
-    fontSize: 26,
-  },
   conversationInfo: {
     flex: 1,
   },
@@ -318,12 +323,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.colors.error + '30',
-  },
-  deleteButtonText: {
-    fontSize: 20,
-    color: theme.colors.error,
-    fontWeight: '400',
-    lineHeight: 20,
   },
   separator: {
     height: 1,

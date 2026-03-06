@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { theme } from '../theme';
+import { AppBackground } from '../components/AppBackground';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import {
   ComicId,
@@ -28,6 +29,7 @@ import {
   prefetchImagePathWithMetrics,
   warmImageCacheForPaths,
 } from '../services/image-cache.service';
+import { useAchievementCheck } from '../hooks/useAchievementCheck';
 
 const { width } = Dimensions.get('window');
 type ComicViewerRouteProp = RouteProp<MainStackParamList, 'ComicViewer'>;
@@ -37,6 +39,7 @@ export default function ComicViewerScreen() {
   const navigation = useNavigation<ComicViewerNavigationProp>();
   const route = useRoute<ComicViewerRouteProp>();
   const { comicId } = route.params;
+  const { logContentAndCheck } = useAchievementCheck();
   const [currentPage, setCurrentPage] = useState(0);
   const listRef = useRef<FlatList<ComicPageSource>>(null);
   const [failedPrimaryPages, setFailedPrimaryPages] = useState<Record<number, boolean>>({});
@@ -55,6 +58,10 @@ export default function ComicViewerScreen() {
   const comicPaths = useMemo(() => getComicImagePaths(resolvedComicId), [resolvedComicId]);
   const totalPages = comicPages.length;
   const data = comicPages;
+
+  useEffect(() => {
+    logContentAndCheck('comic', resolvedComicId);
+  }, [resolvedComicId, logContentAndCheck]);
 
   useEffect(() => {
     setCurrentPage(0);
@@ -98,6 +105,7 @@ export default function ComicViewerScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <TouchableOpacity
@@ -270,17 +278,16 @@ export default function ComicViewerScreen() {
         </View>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   closeButton: {
     position: 'absolute',
@@ -313,7 +320,7 @@ const styles = StyleSheet.create({
   comicImage: {
     flex: 1,
     width: '100%',
-    borderRadius: theme.borderRadius.lg,
+    borderRadius: theme.borderRadius.md,
   },
   imagePlaceholder: {
     flex: 1,

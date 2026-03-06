@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { type ReactNode } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { theme } from '../theme';
 
 interface BaseProps {
   label: string;
-  icon?: string;
+  icon?: ReactNode | string;
   iconImage?: ImageSourcePropType;
   isFirst?: boolean;
   isLast?: boolean;
@@ -105,7 +105,9 @@ export default function SettingsRow(props: SettingsRowProps) {
         {iconImage ? (
           <Image source={iconImage} style={styles.iconImage} resizeMode="contain" />
         ) : icon ? (
-          <Text style={styles.icon}>{icon}</Text>
+          <View style={styles.icon}>
+            {typeof icon === 'string' ? <Text style={styles.iconEmoji}>{icon}</Text> : icon}
+          </View>
         ) : null}
         <View style={styles.labelContainer}>
           <Text style={[styles.label, isDestructive && styles.destructiveText]}>
@@ -158,9 +160,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   icon: {
-    fontSize: 20,
     width: 28,
-    textAlign: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  iconEmoji: {
+    fontSize: 20,
   },
   iconImage: {
     width: 24,

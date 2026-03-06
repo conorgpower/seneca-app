@@ -25,7 +25,11 @@ import StreakScreen from '../screens/StreakScreen';
 import ReminderScreen from '../screens/ReminderScreen';
 import ComicViewerScreen from '../screens/ComicViewerScreen';
 import AudioLessonScreen from '../screens/AudioLessonScreen';
+import BreathworkScreen from '../screens/BreathworkScreen';
 import LiveReflectionDetailScreen from '../screens/LiveReflectionDetailScreen';
+import FocusLockSetupScreen from '../screens/settings/FocusLockSetupScreen';
+import FocusLockUnlockScreen from '../screens/FocusLockUnlockScreen';
+import AchievementsListScreen from '../screens/AchievementsListScreen';
 
 export type MainStackParamList = {
   App: undefined;
@@ -47,7 +51,11 @@ export type MainStackParamList = {
   Reminder: undefined;
   ComicViewer: { comicId: string };
   AudioLesson: { lessonId: string };
+  Breathwork: { exerciseId: string };
   LiveReflectionDetail: { reflectionId: string; initialReflection?: CommunityReflection };
+  FocusLockSetup: undefined;
+  FocusLockUnlock: undefined;
+  AchievementsList: undefined;
 };
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -56,7 +64,7 @@ const settingsBackButton = (goBack: () => void) => (
   <TouchableOpacity
     onPress={() => {
       goBack();
-      setTimeout(() => drawerEvent.emit(), 100);
+      setTimeout(() => drawerEvent.emit(), 350);
     }}
     style={{
       width: 36,
@@ -128,8 +136,31 @@ export default function MainNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="Breathwork"
+        component={BreathworkScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="LiveReflectionDetail"
         component={LiveReflectionDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="FocusLockSetup"
+        component={FocusLockSetupScreen}
+        options={({ navigation }) => ({
+          title: 'Focus Lock Setup',
+          headerLeft: () => settingsBackButton(navigation.goBack),
+        })}
+      />
+      <Stack.Screen
+        name="FocusLockUnlock"
+        component={FocusLockUnlockScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="AchievementsList"
+        component={AchievementsListScreen}
         options={{ headerShown: false }}
       />
       {/* Settings screens */}

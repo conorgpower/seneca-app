@@ -38,6 +38,11 @@ credentials.json
 # typescript
 *.tsbuildinfo
 
+# downloaded Supabase assets (local mirror)
+assets/audio/
+assets/images/
+assets/mascot/
+
 # generated native folders
 /ios
 /android

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import * as AchievementsService from './achievements.service';
 import type {
   DailyCheckIn,
   DailyCompletion,
@@ -82,6 +83,9 @@ export async function submitCheckIn(
 
     // Update completion record
     await updateStageCompletion(userId, 'check_in', { check_in_value: moodValue });
+
+    // Check mood variety achievement in background
+    AchievementsService.checkAchievements(userId, 'checkin').catch(console.error);
 
     return { data: data as DailyCheckIn, error: null };
   } catch (error) {
@@ -222,6 +226,8 @@ async function updateStageCompletion(
         p_user_id: userId,
         p_completion_date: today,
       });
+      // Check streak achievements in background
+      AchievementsService.checkAchievements(userId, 'streak').catch(console.error);
     }
 
     return { error: null };

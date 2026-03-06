@@ -27,7 +27,7 @@ async function walk(dir: string): Promise<string[]> {
 }
 
 function isSupportedAsset(filePath: string): boolean {
-  return /\.(png|jpg|jpeg|webp|mp3|m4a|wav)$/i.test(filePath);
+  return /\.(png|jpg|jpeg|webp|gif|mp3|m4a|wav)$/i.test(filePath);
 }
 
 function getContentType(filePath: string): string {
@@ -40,6 +40,8 @@ function getContentType(filePath: string): string {
       return 'image/jpeg';
     case '.webp':
       return 'image/webp';
+    case '.gif':
+      return 'image/gif';
     case '.mp3':
       return 'audio/mpeg';
     case '.m4a':
@@ -57,8 +59,26 @@ async function main() {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  const files = (await walk(ASSETS_DIR)).filter(isSupportedAsset);
-  console.log(`Uploading ${files.length} original assets to bucket '${BUCKET}'...`);
+  const singleFileArg = process.argv[2];
+  let files: string[];
+
+  if (singleFileArg) {
+    const fullPath = path.resolve(singleFileArg);
+    const stat = await fs.stat(fullPath);
+    if (stat.isDirectory()) {
+      files = (await walk(fullPath)).filter(isSupportedAsset);
+      console.log(`Uploading ${files.length} assets from '${fullPath}' to bucket '${BUCKET}'...`);
+    } else {
+      if (!isSupportedAsset(fullPath)) {
+        throw new Error(`Unsupported file type: ${fullPath}`);
+      }
+      files = [fullPath];
+      console.log(`Uploading single asset to bucket '${BUCKET}'...`);
+    }
+  } else {
+    files = (await walk(ASSETS_DIR)).filter(isSupportedAsset);
+    console.log(`Uploading ${files.length} original assets to bucket '${BUCKET}'...`);
+  }
 
   for (const fullPath of files) {
     const relativePath = path.relative(ASSETS_DIR, fullPath).split(path.sep).join('/');

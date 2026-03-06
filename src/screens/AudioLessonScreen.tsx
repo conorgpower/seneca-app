@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { theme } from '../theme';
+import { XMarkIcon, SpeakerWaveIcon, PlayIcon, PauseIcon } from 'react-native-heroicons/solid';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import {
   getAudioLessonById,
   getAudioLessonFallbackSource,
   getAudioLessonPrimarySource,
 } from '../data/audio-lessons';
+import AnimatedProgressBar from '../components/AnimatedProgressBar';
+import { useAchievementCheck } from '../hooks/useAchievementCheck';
 
 type AudioLessonRoute = RouteProp<MainStackParamList, 'AudioLesson'>;
 type AudioLessonNavigationProp = NativeStackNavigationProp<MainStackParamList, 'AudioLesson'>;
@@ -26,6 +30,7 @@ export default function AudioLessonScreen() {
   const navigation = useNavigation<AudioLessonNavigationProp>();
   const route = useRoute<AudioLessonRoute>();
   const { lessonId } = route.params;
+  const { logContentAndCheck } = useAchievementCheck();
   const player = useAudioPlayer();
   const status = useAudioPlayerStatus(player);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,6 +53,7 @@ export default function AudioLessonScreen() {
 
     didFallbackRef.current = false;
     setIsAudioActiveAsync(true).catch(() => undefined);
+    logContentAndCheck('audio_lesson', lessonId);
     try {
       player.replace(primarySource);
       player.play();
@@ -94,72 +100,93 @@ export default function AudioLessonScreen() {
   const currentTime = status.currentTime || 0;
   const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
 
+  const handleSeek = useCallback(
+    (p: number) => {
+      if (duration > 0) {
+        player.seekTo(p * duration);
+      }
+    },
+    [player, duration],
+  );
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <TouchableOpacity
-          style={styles.xButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.xButtonText}>✕</Text>
-        </TouchableOpacity>
+    <LinearGradient
+      colors={[theme.colors.background, theme.colors.secondary, theme.colors.background]}
+      locations={[0, 0.5, 1]}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <TouchableOpacity
+            style={styles.xButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <XMarkIcon size={20} color="#FFFFFF" />
+          </TouchableOpacity>
 
-        <View style={styles.hero}>
-          <Text style={styles.emoji}>🎧</Text>
-          <Text style={styles.title}>{lesson.title}</Text>
-          <Text style={styles.description}>{lesson.description}</Text>
-        </View>
-
-        <View style={styles.progressWrap}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+          <View style={styles.hero}>
+            <View style={styles.iconWrap}>
+              <SpeakerWaveIcon size={48} color={theme.colors.secondary} />
+            </View>
+            <Text style={styles.title}>{lesson.title}</Text>
+            <Text style={styles.description}>{lesson.description}</Text>
           </View>
-          <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{formatClock(currentTime)}</Text>
-            <Text style={styles.timeText}>{formatClock(duration)}</Text>
+
+          <View style={styles.progressWrap}>
+            <AnimatedProgressBar
+              progress={progress}
+              height={8}
+              trackColor={theme.colors.backgroundCard}
+              fillColor={theme.colors.primary}
+              fillColorSecondary="#E8C06A"
+              onSeek={handleSeek}
+            />
+            <Text style={styles.elapsedBig}>{formatClock(currentTime)}</Text>
+          </View>
+
+          <View style={styles.controls}>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => player.seekTo(Math.max(0, currentTime - 15))}
+            >
+              <Text style={styles.controlButtonText}>↺ 15s</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.playPauseButton}
+              onPress={async () => {
+                await setIsAudioActiveAsync(true).catch(() => undefined);
+                try {
+                  if (status.playing) player.pause();
+                  else player.play();
+                } catch (error) {
+                  console.warn('[AudioLesson] Play/pause action failed', { lessonId, error });
+                }
+              }}
+            >
+              {status.playing ? <PauseIcon size={24} color={theme.colors.secondary} /> : <PlayIcon size={24} color={theme.colors.secondary} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={() => player.seekTo(Math.max(0, currentTime + 15))}
+            >
+              <Text style={styles.controlButtonText}>15s ↻</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        <View style={styles.controls}>
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={() => player.seekTo(Math.max(0, currentTime - 15))}
-          >
-            <Text style={styles.controlButtonText}>↺ 15s</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.playPauseButton}
-            onPress={async () => {
-              await setIsAudioActiveAsync(true).catch(() => undefined);
-              try {
-                if (status.playing) player.pause();
-                else player.play();
-              } catch (error) {
-                console.warn('[AudioLesson] Play/pause action failed', { lessonId, error });
-              }
-            }}
-          >
-            <Text style={styles.playPauseText}>{status.playing ? 'Pause' : 'Play'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={() => player.seekTo(Math.max(0, currentTime + 15))}
-          >
-            <Text style={styles.controlButtonText}>15s ↻</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -176,17 +203,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.14)',
   },
-  xButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
   hero: {
     alignItems: 'center',
     marginTop: theme.spacing.md,
   },
-  emoji: {
-    fontSize: 72,
+  iconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: theme.colors.quaternary,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: theme.spacing.md,
   },
   title: {
@@ -206,25 +233,13 @@ const styles = StyleSheet.create({
   progressWrap: {
     marginBottom: theme.spacing.md,
   },
-  progressTrack: {
-    width: '100%',
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.backgroundCard,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-  },
-  timeRow: {
-    marginTop: theme.spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  timeText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.sizes.sm,
+  elapsedBig: {
+    color: theme.colors.text,
+    fontSize: 48,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: theme.spacing.xl,
+    letterSpacing: 2,
   },
   controls: {
     flexDirection: 'row',
@@ -247,7 +262,7 @@ const styles = StyleSheet.create({
   },
   playPauseButton: {
     flex: 1.2,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.quaternary,
     borderRadius: theme.borderRadius.md,
     paddingVertical: theme.spacing.md,
     alignItems: 'center',

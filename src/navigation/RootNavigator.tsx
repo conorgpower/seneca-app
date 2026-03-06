@@ -1,16 +1,21 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { ActivityIndicator, View, StyleSheet, Linking } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { handleDeepLink } from '../services/deep-link.service';
+import { AchievementToastProvider } from '../contexts/AchievementToastContext';
 import AuthNavigator from './AuthNavigator';
 import MainNavigator from './MainNavigator';
 import { startSignedInPriorityWarmup } from '../services/image-cache.service';
+
+export const navigationRef = createNavigationContainerRef<any>();
 
 const signedInLinking = {
   prefixes: ['senecaapp://'],
   config: {
     screens: {
+      FocusLockSetup: 'focus-lock',
+      FocusLockUnlock: 'focus-lock/unlock',
       App: {
         screens: {
           Today: {
@@ -147,8 +152,13 @@ export default function RootNavigator() {
   const isSignedIn = isAuthenticated && hasActiveSubscription;
 
   return (
-    <NavigationContainer linking={isSignedIn ? signedInLinking : signedOutLinking}>
-      {isSignedIn ? <MainNavigator /> : <AuthNavigator />}
+    <NavigationContainer
+      ref={navigationRef}
+      linking={isSignedIn ? signedInLinking : signedOutLinking}
+    >
+      <AchievementToastProvider>
+        {isSignedIn ? <MainNavigator /> : <AuthNavigator />}
+      </AchievementToastProvider>
     </NavigationContainer>
   );
 }

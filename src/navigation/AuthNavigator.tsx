@@ -20,6 +20,12 @@ import { trackOnboardingScreenView } from '../services/mixpanel.service';
 import { signInWithApple, signInWithGoogle } from '../services/auth.service';
 import * as UserProfileService from '../services/user-profile.service';
 import { startGentleImageWarmup } from '../services/image-cache.service';
+import NotificationPermissionScreen from '../screens/onboarding/NotificationPermissionScreen';
+import {
+  scheduleOnboardingComebackReminder,
+  cancelOnboardingComebackReminder,
+  scheduleTrialNudgeReminder,
+} from '../services/notifications.service';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,6 +35,7 @@ type FlowStep =
   | 'vision-contrast'
   | 'questions-2'
   | 'validation'
+  | 'notification-permission'
   | 'questions-3'
   | 'momentum'
   | 'questions-4'
@@ -49,8 +56,8 @@ export default function AuthNavigator() {
   const lastTrackedScreenKey = React.useRef<string | null>(null);
   const onboardingWarmupRef = React.useRef<{ stop: () => void } | null>(null);
 
-  // Total steps: Phase1(4) + Vision(1) + Phase2(5) + Validation(1) + Phase3(4) + Momentum(1) + Phase4(2) + TrustSafety(1) + SocialProof(1) + SetupLoading(1) + PlanReady(1) + CreateAccount(1) = 23
-  const TOTAL_STEPS = 23;
+  // Total steps: Phase1(4) + Vision(1) + Phase2(5) + Validation(1) + NotifPermission(1) + Phase3(4) + Momentum(1) + Phase4(2) + TrustSafety(1) + SocialProof(1) + SetupLoading(1) + PlanReady(1) + CreateAccount(1) = 24
+  const TOTAL_STEPS = 24;
   const PHASE_QUESTIONS = [4, 5, 4, 2]; // Questions per phase
 
   const getCurrentStep = (): number => {
@@ -64,22 +71,24 @@ export default function AuthNavigator() {
       return 5 + currentQuestionInPhase + 1;
     } else if (currentFlow === 'validation') {
       return 11;
+    } else if (currentFlow === 'notification-permission') {
+      return 12;
     } else if (currentFlow === 'questions-3') {
-      return 11 + currentQuestionInPhase + 1;
+      return 12 + currentQuestionInPhase + 1;
     } else if (currentFlow === 'momentum') {
-      return 16;
+      return 17;
     } else if (currentFlow === 'questions-4') {
-      return 16 + currentQuestionInPhase + 1;
+      return 17 + currentQuestionInPhase + 1;
     } else if (currentFlow === 'trust-safety') {
-      return 19;
-    } else if (currentFlow === 'social-proof') {
       return 20;
-    } else if (currentFlow === 'setup-loading') {
+    } else if (currentFlow === 'social-proof') {
       return 21;
-    } else if (currentFlow === 'plan-ready') {
+    } else if (currentFlow === 'setup-loading') {
       return 22;
-    } else if (currentFlow === 'create-account') {
+    } else if (currentFlow === 'plan-ready') {
       return 23;
+    } else if (currentFlow === 'create-account') {
+      return 24;
     }
     
     return step;
@@ -239,6 +248,16 @@ export default function AuthNavigator() {
   };
 
   const handleValidationComplete = () => {
+    setCurrentFlow('notification-permission');
+  };
+
+  const handleNotificationPermissionComplete = (permissionGranted: boolean) => {
+    if (permissionGranted) {
+      scheduleOnboardingComebackReminder().catch((error) => {
+        console.error('Failed to schedule onboarding comeback reminder:', error);
+      });
+    }
+
     setCurrentFlow('questions-3');
     setQuestionPhase(3);
     setCurrentQuestionInPhase(0);
@@ -255,7 +274,6 @@ export default function AuthNavigator() {
   };
 
   const handleSocialProofComplete = () => {
-    // TODO: Request notification permission here
     setCurrentFlow('setup-loading');
   };
 
@@ -292,6 +310,14 @@ export default function AuthNavigator() {
         }
       }
 
+      cancelOnboardingComebackReminder().catch((err) => {
+        console.error('Failed to cancel onboarding comeback reminder:', err);
+      });
+
+      scheduleTrialNudgeReminder().catch((err) => {
+        console.error('Failed to schedule trial nudge reminder:', err);
+      });
+
       // User is now logged in, proceed to paywall
       setCurrentFlow('paywall');
     } catch (error: any) {
@@ -327,7 +353,15 @@ export default function AuthNavigator() {
         console.error('Failed to identify social auth user with RevenueCat:', rcError);
       }
 
+      cancelOnboardingComebackReminder().catch((err) => {
+        console.error('Failed to cancel onboarding comeback reminder:', err);
+      });
+
       if (completedOnboarding) {
+        scheduleTrialNudgeReminder().catch((err) => {
+          console.error('Failed to schedule trial nudge reminder:', err);
+        });
+
         setCurrentFlow('paywall');
       } else {
         setCurrentFlow('questions-1');
@@ -374,7 +408,7 @@ export default function AuthNavigator() {
     } else if (questionPhase === 2) {
       setCurrentFlow('vision-contrast');
     } else if (questionPhase === 3) {
-      setCurrentFlow('validation');
+      setCurrentFlow('notification-permission');
     } else {
       setCurrentFlow('momentum');
     }
@@ -394,6 +428,10 @@ export default function AuthNavigator() {
     setCurrentFlow('questions-2');
     setQuestionPhase(2);
     setCurrentQuestionInPhase(4); // Last question of phase 2
+  };
+
+  const handleBackFromNotificationPermission = () => {
+    setCurrentFlow('validation');
   };
 
   const handleBackFromMomentum = () => {
@@ -472,6 +510,18 @@ export default function AuthNavigator() {
               desiredState={onboardingAnswers['desired-state']}
               overallProgress={getOverallProgress()}
               onBack={handleBackFromValidation}
+            />
+          )}
+        </Stack.Screen>
+      )}
+
+      {currentFlow === 'notification-permission' && (
+        <Stack.Screen name="NotificationPermission">
+          {() => (
+            <NotificationPermissionScreen
+              onComplete={handleNotificationPermissionComplete}
+              overallProgress={getOverallProgress()}
+              onBack={handleBackFromNotificationPermission}
             />
           )}
         </Stack.Screen>

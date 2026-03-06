@@ -10,6 +10,7 @@ import {
   trackStartTrialEvent,
   trackSubscribeEvent,
 } from './appsflyer.service';
+import { cancelTrialNudgeReminder } from './notifications.service';
 import {
   trackMixpanelStartTrialEvent,
   trackMixpanelSubscribeEvent,
@@ -135,6 +136,10 @@ export async function purchasePackage(
   pkg: PurchasesPackage
 ): Promise<{ customerInfo: CustomerInfo; productIdentifier: string }> {
   const { customerInfo, productIdentifier } = await Purchases.purchasePackage(pkg);
+
+  cancelTrialNudgeReminder().catch((err) => {
+    console.error('Failed to cancel trial nudge reminder:', err);
+  });
 
   const currency = pkg.product.currencyCode || 'USD';
   const subscriptionId = productIdentifier || pkg.product.identifier;

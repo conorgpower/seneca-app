@@ -11,16 +11,21 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import RevenueCatUI from 'react-native-purchases-ui';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../services/supabase';
 import * as RevenueCatService from '../../services/revenuecat.service';
+import { UserIcon, KeyIcon, CameraIcon } from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 import { getSupabaseImageSource } from '../../data/asset-cdn';
+import { pickAndUploadAvatar } from '../../services/avatar.service';
 
 export default function AccountSettingsScreen() {
   const navigation = useNavigation<any>();
@@ -29,10 +34,12 @@ export default function AccountSettingsScreen() {
   const userName = user?.user_metadata?.name || 'User';
   const userEmail = user?.email || '';
   const userInitial = userName.charAt(0).toUpperCase();
+  const avatarUrl = user?.user_metadata?.avatar_url;
 
   const [editNameVisible, setEditNameVisible] = useState(false);
   const [newName, setNewName] = useState(userName);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const appleLogo = getSupabaseImageSource('images/logos/apple-white.webp');
   const googleLogo = getSupabaseImageSource('images/logos/google.webp');
 
@@ -64,6 +71,30 @@ export default function AccountSettingsScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAvatarPress = () => {
+    Alert.alert('Change Profile Photo', '', [
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          if (!user?.id) return;
+          setUploadingAvatar(true);
+          await pickAndUploadAvatar(user.id, 'library', refreshSession);
+          setUploadingAvatar(false);
+        },
+      },
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          if (!user?.id) return;
+          setUploadingAvatar(true);
+          await pickAndUploadAvatar(user.id, 'camera', refreshSession);
+          setUploadingAvatar(false);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const handleSignOut = () => {
@@ -112,6 +143,7 @@ export default function AccountSettingsScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -120,9 +152,23 @@ export default function AccountSettingsScreen() {
       >
         {/* Profile Section */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{userInitial}</Text>
-          </View>
+          <TouchableOpacity onPress={handleAvatarPress} activeOpacity={0.8} style={styles.avatarWrapper}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarText}>{userInitial}</Text>
+              </View>
+            )}
+            {uploadingAvatar && (
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <CameraIcon size={14} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.profileName}>{userName}</Text>
           <Text style={styles.profileEmail}>{userEmail}</Text>
         </View>
@@ -131,7 +177,7 @@ export default function AccountSettingsScreen() {
         <SettingsRow
           type="value"
           label="Name"
-          icon="👤"
+          icon={<UserIcon size={20} color={theme.colors.tertiary} />}
           value={userName}
           onPress={() => {
             setNewName(userName);
@@ -145,7 +191,7 @@ export default function AccountSettingsScreen() {
         <SettingsRow
           type="navigate"
           label="Change Password"
-          icon="🔑"
+          icon={<KeyIcon size={20} color={theme.colors.tertiary} />}
           onPress={() => navigation.navigate('ChangePassword')}
           isFirst
           isLast
@@ -239,13 +285,13 @@ export default function AccountSettingsScreen() {
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -258,14 +304,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 12,
+  },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
+    overflow: 'hidden',
+  },
+  avatarFallback: {
     backgroundColor: '#E5A54B',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.background,
   },
   avatarText: {
     fontSize: 36,

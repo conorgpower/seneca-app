@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { theme } from '../theme';
 import ProfileAvatar from '../components/ProfileAvatar';
@@ -19,10 +19,33 @@ import { useAuth } from '../contexts/AuthContext';
 import { drawerEvent } from '../utils/drawerEvent';
 import { BOOKS, getRandomViewerCount } from '../data/works-metadata';
 import { ComicId, COMICS, getComicCoverSources, getComicImagePaths } from '../data/comics';
-import { LESSONS } from '../data/audio-lessons';
+import { LESSONS, formatDuration } from '../data/audio-lessons';
+import { BREATHWORK_EXERCISES, BreathworkIconName } from '../data/breathwork-exercises';
+import {
+  Square2StackIcon,
+  MoonIcon,
+  BoltIcon,
+  HeartIcon,
+  FireIcon,
+  MusicalNoteIcon,
+  SpeakerWaveIcon,
+  SparklesIcon,
+  ChatBubbleBottomCenterTextIcon,
+  BookOpenIcon,
+  VideoCameraIcon,
+  AcademicCapIcon,
+  PaintBrushIcon,
+  EyeIcon,
+  HandRaisedIcon,
+  ClockIcon,
+  ArrowTrendingUpIcon,
+  ScaleIcon,
+  TrophyIcon,
+} from 'react-native-heroicons/solid';
 import { ExploreStackParamList } from '../navigation/ExploreNavigator';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import { warmImageCacheForPath, warmImageCacheForPaths } from '../services/image-cache.service';
+import { AppBackground } from '../components/AppBackground';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +53,23 @@ type ExploreNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<ExploreStackParamList, 'ExploreMain'>,
   NativeStackNavigationProp<MainStackParamList>
 >;
+
+const STOIC_QUOTES = [
+  { text: 'The happiness of your life depends upon the quality of your thoughts.', author: 'Marcus Aurelius' },
+  { text: 'We suffer more often in imagination than in reality.', author: 'Seneca' },
+  { text: 'It is not what happens to you, but how you react to it that matters.', author: 'Epictetus' },
+  { text: 'No man is free who is not master of himself.', author: 'Epictetus' },
+  { text: 'Luck is what happens when preparation meets opportunity.', author: 'Seneca' },
+  { text: 'The best revenge is not to be like your enemy.', author: 'Marcus Aurelius' },
+  { text: 'He who fears death will never do anything worthy of a living man.', author: 'Seneca' },
+];
+
+function getDailyQuote() {
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+  );
+  return STOIC_QUOTES[dayOfYear % STOIC_QUOTES.length];
+}
 
 const PHILOSOPHERS = [
   {
@@ -62,14 +102,33 @@ const PHILOSOPHERS = [
   },
 ];
 
-const TABS = [
-  { id: 'lesson', label: 'Listen', emoji: '🎧' },
-  { id: 'comics', label: 'Comics', emoji: '💭' },
-  { id: 'read', label: 'Read', emoji: '📖' },
-  { id: 'watch', label: 'Watch', emoji: '📺' },
-  { id: 'study', label: 'Study', emoji: '📚' },
-  { id: 'kids', label: 'Kids', emoji: '🎨' },
+const TABS: { id: string; label: string; Icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
+  { id: 'lesson', label: 'Listen', Icon: SpeakerWaveIcon },
+  { id: 'breathe', label: 'Breathe', Icon: SparklesIcon },
+  { id: 'comics', label: 'Comics', Icon: ChatBubbleBottomCenterTextIcon },
+  { id: 'read', label: 'Read', Icon: BookOpenIcon },
+  { id: 'watch', label: 'Watch', Icon: VideoCameraIcon },
+  { id: 'study', label: 'Study', Icon: AcademicCapIcon },
+  { id: 'kids', label: 'Kids', Icon: PaintBrushIcon },
 ];
+
+const LESSON_ICONS: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  amor_fati: HeartIcon,
+  the_borrowed_cup: HandRaisedIcon,
+  memento_mori: ClockIcon,
+  obstacle_becomes_way: ArrowTrendingUpIcon,
+  arrow_and_target: EyeIcon,
+  two_handles: ScaleIcon,
+};
+
+const BREATHWORK_ICONS: Record<BreathworkIconName, React.ComponentType<{ size?: number; color?: string }>> = {
+  Square2StackIcon,
+  MoonIcon,
+  BoltIcon,
+  HeartIcon,
+  FireIcon,
+  MusicalNoteIcon,
+};
 
 export default function ExploreScreen() {
   const navigation = useNavigation<ExploreNavigationProp>();
@@ -86,9 +145,12 @@ export default function ExploreScreen() {
   }, [user?.user_metadata?.name, user?.email]);
 
   // Open drawer when returning from settings
-  useEffect(() => {
-    return drawerEvent.listen(() => setShowProfileDrawer(true));
-  }, []);
+  // Open drawer when returning from settings — only while this tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      return drawerEvent.listen(() => setShowProfileDrawer(true));
+    }, [])
+  );
 
   const handleBookPress = (bookId: string, title: string, author: string) => {
     navigation.navigate('BookReader', { workId: `${author}:${title}` });
@@ -114,17 +176,28 @@ export default function ExploreScreen() {
     navigation.navigate('AudioLesson', { lessonId });
   };
 
+  const handleBreathworkPress = (exerciseId: string) => {
+    navigation.navigate('Breathwork', { exerciseId });
+  };
+
   const renderHeaderAndTabs = () => (
     <>
       <View style={styles.headerContainer}>
         <ProfileAvatar
           name={userName}
+          avatarUrl={user?.user_metadata?.avatar_url}
           onPress={() => setShowProfileDrawer(true)}
         />
         <View style={styles.header}>
           <Text style={styles.title}>Explore</Text>
         </View>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          style={styles.trophyButton}
+          onPress={() => navigation.navigate('AchievementsList')}
+          activeOpacity={0.7}
+        >
+          <TrophyIcon size={20} color={theme.colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -134,27 +207,27 @@ export default function ExploreScreen() {
         contentContainerStyle={styles.tabsContent}
         decelerationRate="fast"
       >
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[
-              styles.tab,
-              activeTab === tab.id && styles.tabActive,
-            ]}
-            onPress={() => setActiveTab(tab.id)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.tabEmoji}>{tab.emoji}</Text>
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab.id && styles.tabTextActive,
-              ]}
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.tab, isActive && styles.tabActive]}
+              onPress={() => setActiveTab(tab.id)}
+              activeOpacity={0.7}
             >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <tab.Icon
+                size={16}
+                color={isActive ? '#FFFFFF' : theme.colors.primary}
+              />
+              <Text
+                style={[styles.tabText, isActive && styles.tabTextActive]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </>
   );
@@ -227,7 +300,8 @@ export default function ExploreScreen() {
 
   if (activeTab === 'comics') {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <AppBackground topSafeZone={180}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.container}>
           <View style={styles.comicsTopChrome}>
             {renderHeaderAndTabs()}
@@ -245,7 +319,7 @@ export default function ExploreScreen() {
             windowSize={5}
             removeClippedSubviews
             ListHeaderComponent={
-              <View style={styles.sectionHeader}>
+              <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
                 <Text style={styles.sectionTitle}>Philosophical Comics</Text>
               </View>
             }
@@ -256,11 +330,13 @@ export default function ExploreScreen() {
           onClose={() => setShowProfileDrawer(false)}
         />
       </SafeAreaView>
+      </AppBackground>
     );
   }
-  
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <AppBackground topSafeZone={180}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {renderHeaderAndTabs()}
 
@@ -279,14 +355,16 @@ export default function ExploreScreen() {
               onPress={() => handleBookPress(book.id, book.title, book.author)}
             >
               <View style={styles.readingLeft}>
-                <Text style={styles.readingEmoji}>{book.emoji}</Text>
+                <View style={styles.readingIconWrap}>
+                  <BookOpenIcon size={20} color={theme.colors.primary} />
+                </View>
                 <View style={styles.readingInfo}>
                   <Text style={styles.readingTitle}>{book.title}</Text>
                   <Text style={styles.readingAuthor}>{book.author}</Text>
                 </View>
               </View>
               <View style={styles.readingViewers}>
-                <Text style={styles.readingViewersIcon}>👁️</Text>
+                <EyeIcon size={14} color={theme.colors.textSecondary} />
                 <Text style={styles.readingViewersText}>
                   {getRandomViewerCount()}
                 </Text>
@@ -300,12 +378,20 @@ export default function ExploreScreen() {
       {/* Listen Tab Content */}
       {activeTab === 'lesson' && (
         <View style={styles.section}>
+          {/* Daily Stoic Quote Banner */}
+          <View style={styles.quoteBanner}>
+            <View style={styles.quoteLine} />
+            <Text style={styles.quoteText}>"{getDailyQuote().text}"</Text>
+            <Text style={styles.quoteAuthor}>— {getDailyQuote().author}</Text>
+          </View>
+
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Audio Lessons</Text>
           </View>
 
           <View style={styles.lessonsContainer}>
             {LESSONS.map((lesson) => {
+              const LessonIcon = LESSON_ICONS[lesson.id] || SpeakerWaveIcon;
               return (
                 <TouchableOpacity
                   key={lesson.id}
@@ -313,9 +399,51 @@ export default function ExploreScreen() {
                   onPress={() => handleLessonPress(lesson.id)}
                   activeOpacity={0.8}
                 >
+                  <View style={styles.lessonIconWrap}>
+                    <LessonIcon size={20} color={theme.colors.primary} />
+                  </View>
                   <View style={styles.lessonInfo}>
                     <Text style={styles.lessonTitle}>{lesson.title}</Text>
                     <Text style={styles.lessonDescription}>{lesson.description}</Text>
+                    <Text style={styles.lessonDuration}>{formatDuration(lesson.durationSeconds)}</Text>
+                  </View>
+                  <View style={styles.lessonPlayButton}>
+                    <Text style={styles.lessonPlayButtonText}>▶</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Breathe Tab Content */}
+      {activeTab === 'breathe' && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Breathing Exercises</Text>
+          </View>
+          <View style={styles.lessonsContainer}>
+            {BREATHWORK_EXERCISES.map((exercise) => {
+              const IconComponent = BREATHWORK_ICONS[exercise.icon];
+              return (
+                <TouchableOpacity
+                  key={exercise.id}
+                  style={styles.lessonCard}
+                  onPress={() => handleBreathworkPress(exercise.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.breathworkIconWrap}>
+                    <IconComponent size={22} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.lessonInfo}>
+                    <Text style={styles.lessonTitle}>{exercise.title}</Text>
+                    <Text style={styles.lessonDescription}>
+                      {exercise.description}
+                    </Text>
+                    <Text style={styles.breathworkMeta}>
+                      {exercise.purpose}  ·  {exercise.durationMinutes} min
+                    </Text>
                   </View>
                   <View style={styles.lessonPlayButton}>
                     <Text style={styles.lessonPlayButtonText}>▶</Text>
@@ -331,9 +459,15 @@ export default function ExploreScreen() {
       {(activeTab === 'kids' || activeTab === 'watch' || activeTab === 'study') && (
         <View style={styles.comingSoonContainer}>
           <View style={styles.comingSoonContent}>
-            <Text style={styles.comingSoonEmoji}>
-              {activeTab === 'kids' ? '🎨' : activeTab === 'watch' ? '📺' : '📚'}
-            </Text>
+            <View style={styles.comingSoonIconWrap}>
+              {activeTab === 'kids' ? (
+                <PaintBrushIcon size={40} color={theme.colors.primary} />
+              ) : activeTab === 'watch' ? (
+                <VideoCameraIcon size={40} color={theme.colors.primary} />
+              ) : (
+                <AcademicCapIcon size={40} color={theme.colors.primary} />
+              )}
+            </View>
             <Text style={styles.comingSoonTitle}>Coming Soon</Text>
             <Text style={styles.comingSoonDescription}>
               {activeTab === 'kids'
@@ -351,17 +485,16 @@ export default function ExploreScreen() {
       onClose={() => setShowProfileDrawer(false)}
     />
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
     paddingBottom: theme.spacing.xl,
@@ -377,15 +510,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-  headerSpacer: {
-    width: 60,
+  trophyButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    flex: 1,
     fontSize: theme.typography.sizes.xxxl,
     fontWeight: 'bold',
     color: theme.colors.text,
-    marginLeft: theme.spacing.sm,
   },
   tabsContainer: {
     flexGrow: 0,
@@ -398,6 +534,7 @@ const styles = StyleSheet.create({
   tab: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.borderRadius.full || 20,
@@ -411,10 +548,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
-  },
-  tabEmoji: {
-    fontSize: 16,
-    marginRight: theme.spacing.xs,
   },
   tabText: {
     fontSize: theme.typography.sizes.sm,
@@ -531,20 +664,27 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   readingCard: {
-    backgroundColor: theme.colors.backgroundCard,
+    backgroundColor: 'rgba(242, 223, 192, 0.1)',
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(222, 173, 92, 0.2)',
   },
   readingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  readingEmoji: {
-    fontSize: 32,
+  readingIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: theme.spacing.md,
   },
   readingInfo: {
@@ -563,30 +703,69 @@ const styles = StyleSheet.create({
   readingViewers: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
     backgroundColor: theme.colors.background,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
     borderRadius: theme.borderRadius.sm,
   },
-  readingViewersIcon: {
-    fontSize: 14,
-    marginRight: 4,
-  },
   readingViewersText: {
     fontSize: theme.typography.sizes.xs,
     color: theme.colors.textSecondary,
+  },
+  quoteBanner: {
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: 'rgba(222, 173, 92, 0.08)',
+    borderRadius: theme.borderRadius.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+  },
+  quoteLine: {
+    display: 'none',
+  },
+  quoteText: {
+    fontSize: theme.typography.sizes.md,
+    color: theme.colors.primaryLight,
+    fontStyle: 'italic',
+    lineHeight: 24,
+    marginBottom: theme.spacing.sm,
+  },
+  quoteAuthor: {
+    fontSize: theme.typography.sizes.sm,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  lessonIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.md,
+  },
+  lessonDuration: {
+    fontSize: theme.typography.sizes.xs,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    marginTop: 4,
   },
   lessonsContainer: {
     paddingHorizontal: theme.spacing.lg,
     gap: theme.spacing.md,
   },
   lessonCard: {
-    backgroundColor: theme.colors.backgroundCard,
+    backgroundColor: 'rgba(242, 223, 192, 0.1)',
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(222, 173, 92, 0.2)',
   },
   lessonCardActive: {
     borderWidth: 1,
@@ -606,6 +785,21 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.sizes.sm,
     color: theme.colors.textSecondary,
     lineHeight: 20,
+  },
+  breathworkIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.md,
+  },
+  breathworkMeta: {
+    fontSize: theme.typography.sizes.xs,
+    color: theme.colors.primary,
+    marginTop: 4,
+    fontWeight: '600',
   },
   lessonPlayButton: {
     width: 42,
@@ -633,10 +827,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     maxWidth: 300,
   },
-  comingSoonEmoji: {
-    fontSize: 80,
+  comingSoonIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: theme.spacing.lg,
-    opacity: 0.9,
   },
   comingSoonTitle: {
     fontSize: theme.typography.sizes.xxxl,

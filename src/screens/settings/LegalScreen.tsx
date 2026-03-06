@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import { DocumentTextIcon, LockClosedIcon } from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 import type { MainStackParamList } from '../../navigation/MainNavigator';
 
@@ -13,6 +15,7 @@ export default function LegalScreen() {
   const navigation = useNavigation<Nav>();
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -23,7 +26,7 @@ export default function LegalScreen() {
         <SettingsRow
           type="navigate"
           label="Terms of Service"
-          icon="📄"
+          icon={<DocumentTextIcon size={20} color={theme.colors.tertiary} />}
           onPress={() =>
             navigation.navigate('LegalDocument', {
               documentKey: 'terms',
@@ -35,7 +38,7 @@ export default function LegalScreen() {
         <SettingsRow
           type="navigate"
           label="Privacy Policy"
-          icon="🔒"
+          icon={<LockClosedIcon size={20} color={theme.colors.tertiary} />}
           onPress={() =>
             navigation.navigate('LegalDocument', {
               documentKey: 'privacy',
@@ -69,13 +72,13 @@ export default function LegalScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,

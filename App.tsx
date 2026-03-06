@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { TodayProvider } from './src/contexts/TodayContext';
+import { FocusLockProvider } from './src/contexts/FocusLockContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import { initializeRevenueCat } from './src/services/revenuecat.service';
 import { initializeAppsFlyer } from './src/services/appsflyer.service';
@@ -38,13 +40,17 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <TodayProvider>
-          <RootNavigator />
-          <StatusBar style="light" />
-        </TodayProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <KeyboardProvider>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <FocusLockProvider>
+            <TodayProvider>
+              <RootNavigator />
+              <StatusBar style="light" />
+            </TodayProvider>
+          </FocusLockProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </KeyboardProvider>
   );
 }

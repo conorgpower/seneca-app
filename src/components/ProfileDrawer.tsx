@@ -9,11 +9,27 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { theme } from '../theme';
+import {
+  UserIcon,
+  BellIcon,
+  SwatchIcon,
+  DevicePhoneMobileIcon,
+  LockClosedIcon,
+  ShieldCheckIcon,
+  DocumentTextIcon,
+  InformationCircleIcon,
+  FireIcon,
+  CameraIcon,
+} from 'react-native-heroicons/solid';
 import { useAuth } from '../contexts/AuthContext';
 import { useToday } from '../contexts/TodayContext';
+import { pickAndUploadAvatar } from '../services/avatar.service';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,25 +39,51 @@ interface ProfileDrawerProps {
 }
 
 export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshSession } = useAuth();
   const { currentStreak } = useToday();
   const navigation = useNavigation<any>();
-  const slideAnim = React.useRef(new Animated.Value(-width * 0.85)).current;
+  const avatarUrl = user?.user_metadata?.avatar_url;
+  const [uploadingAvatar, setUploadingAvatar] = React.useState(false);
+
+  const DRAWER_WIDTH = width * 0.85;
+  const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const overlayAnim = React.useRef(new Animated.Value(0)).current;
+  const [modalVisible, setModalVisible] = React.useState(false);
 
   React.useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: -width * 0.85,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+      // Mount the modal first, then animate in
+      setModalVisible(true);
+      slideAnim.setValue(-DRAWER_WIDTH);
+      overlayAnim.setValue(0);
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(overlayAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (modalVisible) {
+      // Animate out, then unmount
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -DRAWER_WIDTH,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(overlayAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setModalVisible(false);
+      });
     }
   }, [visible]);
 
@@ -52,41 +94,87 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
   const streakCurrent = currentStreak?.current_streak ?? 0;
   const streakLongest = currentStreak?.longest_streak ?? 0;
 
+  const animateClose = React.useCallback((afterClose?: () => void) => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: -DRAWER_WIDTH,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setModalVisible(false);
+      onClose();
+      afterClose?.();
+    });
+  }, [slideAnim, overlayAnim, DRAWER_WIDTH, onClose]);
+
   const navigateTo = (screen: string) => {
-    onClose();
-    setTimeout(() => {
+    animateClose(() => {
       navigation.navigate(screen);
-    }, 150);
+    });
   };
+
+  const iconColor = theme.colors.tertiary;
+  const iconSize = 20;
 
   const menuSections = [
-    { id: 'account', icon: '👤', label: 'Account', screen: 'AccountSettings' },
-    { id: 'notifications', icon: '🔔', label: 'Notifications', screen: 'NotificationSettings' },
-    { id: 'appearance', icon: '🎨', label: 'Appearance', screen: 'AppearanceSettings' },
-    { id: 'widget-setup', icon: '📱', label: 'Widget Setup', screen: 'WidgetSetup' },
-    { id: 'privacy', icon: '🔒', label: 'Privacy & Data', screen: 'PrivacySettings' },
-    { id: 'safety', icon: '🛡️', label: 'Safety & Support', screen: 'SafetySupport' },
-    { id: 'legal', icon: '📄', label: 'Legal', screen: 'Legal' },
-    { id: 'about', icon: 'ℹ️', label: 'About', screen: 'About' },
+    { id: 'account', icon: <UserIcon size={iconSize} color={iconColor} />, label: 'Account', screen: 'AccountSettings' },
+    { id: 'notifications', icon: <BellIcon size={iconSize} color={iconColor} />, label: 'Notifications', screen: 'NotificationSettings' },
+    { id: 'appearance', icon: <SwatchIcon size={iconSize} color={iconColor} />, label: 'Appearance', screen: 'AppearanceSettings' },
+    { id: 'widget-setup', icon: <DevicePhoneMobileIcon size={iconSize} color={iconColor} />, label: 'Widget Setup', screen: 'WidgetSetup' },
+    { id: 'focus-lock', icon: <LockClosedIcon size={iconSize} color={iconColor} />, label: 'Focus Lock Setup', screen: 'FocusLockSetup' },
+    { id: 'privacy', icon: <LockClosedIcon size={iconSize} color={iconColor} />, label: 'Privacy & Data', screen: 'PrivacySettings' },
+    { id: 'safety', icon: <ShieldCheckIcon size={iconSize} color={iconColor} />, label: 'Safety & Support', screen: 'SafetySupport' },
+    { id: 'legal', icon: <DocumentTextIcon size={iconSize} color={iconColor} />, label: 'Legal', screen: 'Legal' },
+    { id: 'about', icon: <InformationCircleIcon size={iconSize} color={iconColor} />, label: 'About', screen: 'About' },
   ];
 
-  const handleSignOut = async () => {
-    onClose();
-    await signOut();
+  const handleAvatarPress = () => {
+    Alert.alert('Change Profile Photo', '', [
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          if (!user?.id) return;
+          setUploadingAvatar(true);
+          await pickAndUploadAvatar(user.id, 'library', refreshSession);
+          setUploadingAvatar(false);
+        },
+      },
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          if (!user?.id) return;
+          setUploadingAvatar(true);
+          await pickAndUploadAvatar(user.id, 'camera', refreshSession);
+          setUploadingAvatar(false);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
-  // Guard against undefined user data
-  if (!visible || !userName || !userEmail || !userInitial) return null;
+  const handleSignOut = async () => {
+    animateClose(async () => {
+      await signOut();
+    });
+  };
+
+  if (!modalVisible || !userName || !userEmail || !userInitial) return null;
 
   return (
     <Modal
-      visible={visible}
+      visible={modalVisible}
       transparent
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={() => animateClose()}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.overlay}>
+      <TouchableWithoutFeedback onPress={() => animateClose()}>
+        <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
           <TouchableWithoutFeedback>
             <Animated.View
               style={[
@@ -103,9 +191,23 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
               >
                 {/* Profile Header */}
                 <View style={styles.header}>
-                  <View style={styles.avatarLarge}>
-                    <Text style={styles.initialLarge}>{userInitial}</Text>
-                  </View>
+                  <TouchableOpacity onPress={handleAvatarPress} activeOpacity={0.8} style={styles.avatarWrapper}>
+                    {avatarUrl ? (
+                      <Image source={{ uri: avatarUrl }} style={styles.avatarLarge} />
+                    ) : (
+                      <View style={[styles.avatarLarge, styles.avatarLargeFallback]}>
+                        <Text style={styles.initialLarge}>{userInitial}</Text>
+                      </View>
+                    )}
+                    {uploadingAvatar && (
+                      <View style={styles.avatarLoadingOverlay}>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      </View>
+                    )}
+                    <View style={styles.cameraIconBadge}>
+                      <CameraIcon size={12} color="#FFFFFF" />
+                    </View>
+                  </TouchableOpacity>
                   <View style={styles.userInfo}>
                     <View style={styles.nameContainer}>
                       <Text style={styles.userName}>{userName}</Text>
@@ -122,12 +224,12 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
                 {/* Streak Cards */}
                 <View style={styles.streakContainer}>
                   <View style={[styles.streakCard, styles.streakCardLeft]}>
-                    <Text style={styles.streakEmoji}>🔥</Text>
+                    <FireIcon size={24} color={theme.colors.primary} style={styles.streakIcon} />
                     <Text style={styles.streakNumber}>{streakCurrent}</Text>
                     <Text style={styles.streakLabel}>Current Streak</Text>
                   </View>
                   <View style={styles.streakCard}>
-                    <Text style={styles.streakEmoji}>🔥</Text>
+                    <FireIcon size={24} color={theme.colors.primary} style={styles.streakIcon} />
                     <Text style={styles.streakNumber}>{streakLongest}</Text>
                     <Text style={styles.streakLabel}>Longest Streak</Text>
                   </View>
@@ -144,7 +246,7 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
                     >
                       <View style={styles.menuItemLeft}>
                         <View style={styles.menuIcon}>
-                          <Text style={styles.menuIconText}>{item.icon}</Text>
+                          {item.icon}
                         </View>
                         <Text style={styles.menuLabel}>{item.label}</Text>
                       </View>
@@ -160,7 +262,7 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
               </ScrollView>
             </Animated.View>
           </TouchableWithoutFeedback>
-        </View>
+        </Animated.View>
       </TouchableWithoutFeedback>
     </Modal>
   );
@@ -194,14 +296,44 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 16,
+  },
   avatarLarge: {
     width: 72,
     height: 72,
     borderRadius: 36,
+    overflow: 'hidden',
+  },
+  avatarLargeFallback: {
     backgroundColor: '#E5A54B',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+  },
+  avatarLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraIconBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.background,
   },
   initialLarge: {
     fontSize: 36,
@@ -254,8 +386,7 @@ const styles = StyleSheet.create({
   streakCardLeft: {
     marginRight: 0,
   },
-  streakEmoji: {
-    fontSize: 24,
+  streakIcon: {
     marginBottom: 8,
   },
   streakNumber: {
@@ -295,9 +426,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  menuIconText: {
-    fontSize: 20,
   },
   menuLabel: {
     fontSize: 17,

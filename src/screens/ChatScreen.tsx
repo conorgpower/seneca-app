@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,32 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
-  ImageBackground,
+  Image,
+  Dimensions,
+  Modal,
+  Share,
   KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
   Platform,
+  Animated,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GiftedChat, IMessage, Bubble, InputToolbar } from 'react-native-gifted-chat';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { GiftedChat, IMessage, Message, Day } from 'react-native-gifted-chat';
+import { useNavigation, useRoute, useFocusEffect, RouteProp } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
+import {
+  FireIcon,
+  SparklesIcon,
+  RocketLaunchIcon,
+  BoltIcon,
+  LightBulbIcon,
+  BuildingLibraryIcon,
+  ClockIcon,
+  ShareIcon,
+  ChatBubbleLeftIcon,
+  XMarkIcon,
+} from 'react-native-heroicons/solid';
 import { theme } from '../theme';
 import { aiService } from '../services/ai.service';
 import { getRandomTextSection } from '../services/supabase';
@@ -21,17 +39,70 @@ import { getDailyPassage } from '../services/philosophical-passages.service';
 import ChatHistoryModal from '../components/ChatHistoryModal';
 import ProfileAvatar from '../components/ProfileAvatar';
 import ProfileDrawer from '../components/ProfileDrawer';
+import MascotWelcome, { QuickChip } from '../components/MascotWelcome';
+import ChatInputBar from '../components/ChatInputBar';
+import ChatBubble from '../components/ChatBubble';
+import TypingIndicator from '../components/TypingIndicator';
 import { useAuth } from '../contexts/AuthContext';
+import { AppBackground } from '../components/AppBackground';
 import {
   saveConversation,
   loadConversation,
   convertConversationToIMessages,
 } from '../services/chat-history.service';
 import { drawerEvent } from '../utils/drawerEvent';
-import { triggerHaptic } from '../hooks/useAppPreferences';
+
 import { getSupabaseImageSource } from '../data/asset-cdn';
 import { getUserProfile } from '../services/user-profile.service';
 import { buildLightPersonalizationHint } from '../services/profile-context.service';
+import { useAchievementCheck } from '../hooks/useAchievementCheck';
+
+// ── Quick chip data per prompt type ─────────────────────────────────────────
+const PROMPT_CHIPS: Record<string, Array<{ label: string; message: string }>> = {
+  'Dealing with adversity': [
+    { label: "I'm struggling",  message: "I'm struggling with something right now" },
+    { label: 'Find strength',   message: 'Help me find strength in this difficulty' },
+    { label: 'Move forward',    message: 'How do I move forward despite setbacks?' },
+    { label: 'My story',        message: "Let me tell you what I'm going through" },
+  ],
+  'Finding inner peace': [
+    { label: 'Calm my mind',    message: 'Help me calm my mind' },
+    { label: 'Let things go',   message: "I'm struggling to let something go" },
+    { label: 'Find stillness',  message: 'How do I find peace with where I am?' },
+    { label: 'Quiet the chaos', message: "There's too much chaos in my mind" },
+  ],
+  'Living with purpose': [
+    { label: 'Find my why',   message: 'Help me discover my purpose' },
+    { label: 'I feel adrift', message: 'I feel lost and without direction' },
+    { label: 'Take action',   message: 'I want to live with more intention' },
+    { label: 'Find meaning',  message: 'What truly matters in life?' },
+  ],
+  'Overcoming fear': [
+    { label: 'Confront my fear',    message: 'I want to talk about a fear I have' },
+    { label: 'Be brave',            message: 'How do I act bravely despite fear?' },
+    { label: 'What holds me back',  message: 'Something is holding me back' },
+    { label: 'Embrace fear',      message: 'Teach me to embrace fear rather than avoid it' },
+  ],
+  'Daily wisdom': [
+    { label: "Today's lesson",  message: 'What wisdom should I carry today?' },
+    { label: 'Reflect with me', message: 'Help me reflect on my day' },
+    { label: 'Live better',     message: 'How can I live more wisely each day?' },
+    { label: 'Morning thought', message: 'Give me a morning philosophical reflection' },
+  ],
+  'Building character': [
+    { label: 'Be virtuous',    message: 'How do I become more virtuous?' },
+    { label: 'My weakness',    message: 'I want to work on a weakness of mine' },
+    { label: 'Daily habits',   message: 'What habits build strong character?' },
+    { label: 'Be disciplined', message: 'Help me become more disciplined' },
+  ],
+};
+
+const DEFAULT_CHIPS = [
+  { label: 'Guide me',         message: 'Guide me' },
+  { label: 'Share wisdom',     message: 'Share wisdom with me' },
+  { label: 'Help me reflect',  message: 'Help me reflect today' },
+  { label: "What's on my mind", message: "I want to talk about what's on my mind" },
+];
 
 type ChatRouteParams = {
   initialContext?: string;
@@ -42,8 +113,11 @@ export default function ChatScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<{ params: ChatRouteParams }, 'params'>>();
   const { user } = useAuth();
-  const insets = useSafeAreaInsets();
+  const { checkAndNotify } = useAchievementCheck();
+
   const [showChat, setShowChat] = useState(false);
+  const [chatVisible, setChatVisible] = useState(false); // controls render
+  const slideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const userName = React.useMemo(() => {
     return user?.user_metadata?.name || (user?.email ? user.email.split('@')[0] : 'User');
@@ -66,13 +140,44 @@ export default function ChatScreen() {
   const [dailyQuote, setDailyQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showPassageModal, setShowPassageModal] = useState(false);
   const [currentConversationId, setCurrentConversationId] = useState<string | undefined>();
   const [currentPromptType, setCurrentPromptType] = useState<string | undefined>();
   const conversationIdRef = useRef<string | undefined>(undefined);
+  const promptTypeRef = useRef<string | undefined>(undefined);
+  const userIdRef = useRef<string | undefined>(user?.id);
+
+  // Keep refs in sync with state
+  useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+  useEffect(() => { promptTypeRef.current = currentPromptType; }, [currentPromptType]);
   const [, forcePassageRender] = useState(0);
   const passageLoadStartMsRef = useRef<number | null>(null);
   const loggedPassageLoadedRef = useRef(false);
   const passageBackgroundImage = getSupabaseImageSource('images/background-quote.webp');
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+  const openChat = useCallback(() => {
+    setChatVisible(true);
+    setShowChat(true);
+    slideAnim.setValue(SCREEN_HEIGHT);
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      damping: 22,
+      stiffness: 90,
+    }).start();
+  }, [slideAnim, SCREEN_HEIGHT]);
+
+  const closeChat = useCallback(() => {
+    Animated.timing(slideAnim, {
+      toValue: SCREEN_HEIGHT,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowChat(false);
+      setChatVisible(false);
+    });
+  }, [slideAnim, SCREEN_HEIGHT]);
 
   useEffect(() => {
     loadDailyQuote();
@@ -106,10 +211,12 @@ export default function ChatScreen() {
     };
   }, [user?.id]);
 
-  // Open drawer when returning from settings
-  useEffect(() => {
-    return drawerEvent.listen(() => setShowProfileDrawer(true));
-  }, []);
+  // Open drawer when returning from settings — only while this tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      return drawerEvent.listen(() => setShowProfileDrawer(true));
+    }, [])
+  );
 
   // Handle preloaded context from navigation params
   useEffect(() => {
@@ -128,7 +235,7 @@ export default function ChatScreen() {
       setCurrentConversationId(undefined);
       conversationIdRef.current = undefined;
       aiService.clearHistory();
-      setShowChat(true);
+      openChat();
 
       // Automatically send the initial message
       setTimeout(() => {
@@ -180,63 +287,22 @@ export default function ChatScreen() {
     }
   };
 
-  const startChatWithPrompt = async (promptTitle: string) => {
-    let openingMessage = '';
-    
-    switch(promptTitle) {
-      case 'Dealing with adversity':
-        openingMessage = '"The impediment to action advances action. What stands in the way becomes the way." - Marcus Aurelius\n\nAdversity is not your enemy, but your teacher. Every obstacle contains within it the seeds of growth and strength. Tell me, what challenge weighs upon you?';
-        break;
-      case 'Finding inner peace':
-        openingMessage = '"You have power over your mind - not outside events. Realize this, and you will find strength." - Marcus Aurelius\n\nTrue peace comes not from controlling the world around you, but from mastering the world within. What disturbs your tranquility?';
-        break;
-      case 'Living with purpose':
-        openingMessage = '"He who has a why to live can bear almost any how." - Nietzsche\n\nPurpose is the compass that guides us through life\'s storms. It transforms mere existence into meaningful action. What calls to your soul?';
-        break;
-      case 'Overcoming fear':
-        openingMessage = '"We suffer more often in imagination than in reality." - Seneca\n\nFear is often the shadow of things that may never come to pass. Courage is not the absence of fear, but action in spite of it. What fear holds you back?';
-        break;
-      case 'Daily wisdom':
-        openingMessage = '"The unexamined life is not worth living." - Socrates\n\nEach day offers an opportunity to live with greater wisdom and virtue. Philosophy is not mere theory, but a way of life. What wisdom do you seek today?';
-        break;
-      case 'Building character':
-        openingMessage = '"Waste no more time arguing about what a good man should be. Be one." - Marcus Aurelius\n\nCharacter is forged in the crucible of daily choices. Virtue is not an abstract ideal, but a practice. What aspect of your character do you wish to strengthen?';
-        break;
-      default:
-        openingMessage = 'I am here to share the wisdom of the great philosophers - from Stoics like Marcus Aurelius and Epictetus, to thinkers like Nietzsche and Plato. What troubles your mind today?';
-    }
-
-    setMessages([{
-      _id: 1,
-      text: openingMessage,
-      createdAt: new Date(),
-      user: {
-        _id: 2,
-        name: 'Seneca',
-      },
-    }]);
+  const startChatWithPrompt = (promptTitle: string) => {
+    setMessages([]);
     setCurrentPromptType(promptTitle);
     setCurrentConversationId(undefined);
     conversationIdRef.current = undefined;
     aiService.clearHistory(); // Reset AI context for new conversation
-    setShowChat(true);
+    openChat();
   };
 
   const startNewChat = () => {
-    setMessages([{
-      _id: 1,
-      text: 'I am here to share the wisdom of the great philosophers - from Stoics like Marcus Aurelius and Epictetus, to thinkers like Nietzsche and Plato. What troubles your mind today?',
-      createdAt: new Date(),
-      user: {
-        _id: 2,
-        name: 'Seneca',
-      },
-    }]);
+    setMessages([]);
     setCurrentPromptType(undefined);
     setCurrentConversationId(undefined);
     conversationIdRef.current = undefined;
     aiService.clearHistory(); // Reset AI context for new conversation
-    setShowChat(true);
+    openChat();
   };
 
   const loadExistingConversation = async (conversationId: string) => {
@@ -261,7 +327,7 @@ export default function ChatScreen() {
           }
         });
         
-        setShowChat(true);
+        openChat();
       }
     } catch (error) {
       console.error('Error loading conversation:', error);
@@ -269,12 +335,12 @@ export default function ChatScreen() {
   };
 
   const chatPrompts = [
-    { id: 1, title: 'Dealing with adversity', icon: '💪' },
-    { id: 2, title: 'Finding inner peace', icon: '🧘' },
-    { id: 3, title: 'Living with purpose', icon: '🎯' },
-    { id: 4, title: 'Overcoming fear', icon: '⚡' },
-    { id: 5, title: 'Daily wisdom', icon: '📖' },
-    { id: 6, title: 'Building character', icon: '🏛️' },
+    { id: 1, title: 'Dealing with adversity', Icon: FireIcon },
+    { id: 2, title: 'Finding inner peace', Icon: SparklesIcon },
+    { id: 3, title: 'Living with purpose', Icon: RocketLaunchIcon },
+    { id: 4, title: 'Overcoming fear', Icon: BoltIcon },
+    { id: 5, title: 'Daily wisdom', Icon: LightBulbIcon },
+    { id: 6, title: 'Building character', Icon: BuildingLibraryIcon },
   ];
 
   const onSend = useCallback(async (newMessages: IMessage[] = []) => {
@@ -312,15 +378,19 @@ export default function ChatScreen() {
         const updatedMessages = GiftedChat.append(previousMessages, [aiMessage]);
         
         // Auto-save conversation after AI response
-        // Use ref to avoid race conditions when starting new chats
+        // Use refs to avoid stale closure values
         const conversationIdToUse = conversationIdRef.current;
-        
-        if (user?.id) {
-          saveConversation(user.id, updatedMessages, currentPromptType, conversationIdToUse)
+        const uid = userIdRef.current;
+        const prompt = promptTypeRef.current;
+
+        if (uid) {
+          saveConversation(uid, updatedMessages, prompt, conversationIdToUse)
             .then(conversationId => {
               if (!conversationIdToUse) {
                 conversationIdRef.current = conversationId;
                 setCurrentConversationId(conversationId);
+                // New conversation created — check chat achievements
+                checkAndNotify('chat');
               }
             })
             .catch(err => console.error('Error saving conversation:', err));
@@ -351,120 +421,119 @@ export default function ChatScreen() {
   }, []);
 
   const renderBubble = (props: any) => {
+    return <ChatBubble {...props} />;
+  };
+
+  const renderMessage = (props: any) => {
     return (
-      <Bubble
+      <Message
         {...props}
-        wrapperStyle={{
-          left: {
-            backgroundColor: theme.colors.backgroundCard,
-          },
-          right: {
-            backgroundColor: theme.colors.primary,
-          },
-        }}
-        textStyle={{
-          left: {
-            color: theme.colors.text,
-            fontSize: 16,
-          },
-          right: {
-            color: '#FFFFFF',
-            fontSize: 16,
-          },
+        containerStyle={{
+          left: { maxWidth: '85%' },
+          right: { maxWidth: '85%' },
         }}
       />
     );
   };
 
-  const renderInputToolbar = (props: any) => {
-    return (
-      <InputToolbar
-        {...props}
-        containerStyle={styles.inputToolbar}
-        primaryStyle={styles.inputPrimary}
-      />
-    );
-  };
+  // Converts a plain string from ChatInputBar into an IMessage and sends it
+  const handleInputSend = useCallback((text: string) => {
+    const message: IMessage = {
+      _id: Math.random().toString(),
+      text,
+      createdAt: new Date(),
+      user: { _id: 1, name: userName },
+    };
+    onSend([message]);
+  }, [userName, onSend]);
+
+  // Quick-reply chips — unique per selected prompt type
+  const activeChips = useMemo<QuickChip[]>(() => {
+    const data = currentPromptType ? (PROMPT_CHIPS[currentPromptType] ?? DEFAULT_CHIPS) : DEFAULT_CHIPS;
+    return data.map(({ label, message }) => ({ label, onPress: () => handleInputSend(message) }));
+  }, [currentPromptType, handleInputSend]);
 
   const renderFooter = () => {
     if (isTyping) {
-      return (
-        <View style={styles.typingContainer}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-        </View>
-      );
+      return <TypingIndicator />;
     }
     return null;
   };
 
   const renderAvatar = () => null;
 
-  if (showChat) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.chatHeader}>
-          <TouchableOpacity onPress={() => setShowChat(false)} style={styles.glassButton} activeOpacity={0.7}>
-            <BlurView intensity={100} tint="dark" style={styles.blurContainer}>
-              <Text style={styles.backIcon}>←</Text>
-            </BlurView>
-          </TouchableOpacity>
-        </View>
-        <KeyboardAvoidingView
-          style={styles.chatBody}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <GiftedChat
-            messages={messages}
-            onSend={(messages) => onSend(messages)}
-            isKeyboardInternallyHandled={false}
-            bottomOffset={Platform.OS === 'ios' ? insets.bottom : 0}
-            user={{
-              _id: 1,
-            }}
-            renderBubble={renderBubble}
-            renderInputToolbar={renderInputToolbar}
-            renderFooter={renderFooter}
-            renderAvatar={renderAvatar}
-            messagesContainerStyle={styles.messagesContainer}
-            listViewProps={{
-              keyboardDismissMode: 'interactive',
-              keyboardShouldPersistTaps: 'handled',
-            }}
-            textInputProps={{
-              style: styles.textInput,
-              placeholder: 'Type a message...',
-              placeholderTextColor: '#808080',
-            }}
-            renderSend={(props) => (
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={() => {
-                  if (props.text && props.onSend) {
-                    triggerHaptic('light');
-                    props.onSend({ text: props.text.trim() }, true);
-                  }
-                }}
-                disabled={!props.text || props.text.trim().length === 0}
-              >
-                <Text style={[
-                  styles.sendButtonText,
-                  (!props.text || props.text.trim().length === 0) && styles.sendButtonTextDisabled
-                ]}>➤</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
+  // True once the user has sent at least one message.
+  const hasUserMessages = messages.some(m => m.user._id === 1);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <AppBackground>
+    {/* Chat overlay — slides up from bottom */}
+    {chatVisible && (
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.chatOverlay,
+          { transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.chatHeader}>
+            <TouchableOpacity onPress={closeChat} style={styles.glassButton} activeOpacity={0.7}>
+              <BlurView intensity={100} tint="dark" style={styles.blurContainer}>
+                <Text style={styles.backIcon}>←</Text>
+              </BlurView>
+            </TouchableOpacity>
+          </View>
+
+          <KeyboardAvoidingView
+            style={styles.chatBody}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={0}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+              <View style={{ flex: 1 }}>
+                {hasUserMessages ? (
+                  <GiftedChat
+                    messages={messages}
+                    onSend={(msgs) => onSend(msgs)}
+                    user={{ _id: 1 }}
+                    renderBubble={renderBubble}
+                    renderMessage={renderMessage}
+                    renderDay={(props) => (
+                      <Day
+                        {...props}
+                        textProps={{ style: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: '600' } }}
+                      />
+                    )}
+                    renderInputToolbar={() => null}
+                    minInputToolbarHeight={0}
+                    renderFooter={renderFooter}
+                    renderAvatar={renderAvatar}
+                    messagesContainerStyle={styles.messagesContainer}
+                    listProps={{
+                      keyboardDismissMode: 'interactive',
+                      keyboardShouldPersistTaps: 'handled',
+                    }}
+                  />
+                ) : (
+                  <MascotWelcome chips={activeChips} />
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+
+            <ChatInputBar onSend={handleInputSend} disabled={isTyping} />
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Animated.View>
+    )}
+
+    {/* Landing page — always rendered underneath */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.landingContent}>
         <View style={styles.landingHeaderContainer}>
-          <ProfileAvatar 
+          <ProfileAvatar
             name={userName}
+            avatarUrl={user?.user_metadata?.avatar_url}
             onPress={() => setShowProfileDrawer(true)}
           />
           <View style={styles.landingHeader}>
@@ -474,7 +543,7 @@ export default function ChatScreen() {
             style={styles.historyButton}
             onPress={() => setShowHistoryModal(true)}
           >
-            <Text style={styles.historyButtonIcon}>🔄</Text>
+            <ClockIcon size={20} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -483,12 +552,15 @@ export default function ChatScreen() {
             <ActivityIndicator size="large" color={theme.colors.primary} />
           </View>
         ) : dailyQuote ? (
-          <View style={styles.quoteCard}>
-            {passageBackgroundImage ? (
-              <ImageBackground
+          <TouchableOpacity
+            style={styles.quoteCard}
+            activeOpacity={0.85}
+            onPress={() => setShowPassageModal(true)}
+          >
+            {passageBackgroundImage && (
+              <Image
                 source={passageBackgroundImage}
                 style={styles.quoteBackgroundImage}
-                imageStyle={styles.quoteBackgroundImageStyle}
                 onLoadStart={() => {
                   passageLoadStartMsRef.current = Date.now();
                 }}
@@ -500,25 +572,18 @@ export default function ChatScreen() {
                   loggedPassageLoadedRef.current = true;
                   forcePassageRender((v) => v + 1);
                 }}
-              >
-                <View style={styles.quoteOverlay}>
-                  <Text style={styles.quoteCardTitle}>Passage of the Day</Text>
-                  <Text style={styles.quoteText}>"{dailyQuote.text}"</Text>
-                  <Text style={styles.quoteAuthor}>
-                    {`— ${dailyQuote.author}${dailyQuote.work ? `, ${dailyQuote.work}` : ''}`}
-                  </Text>
-                </View>
-              </ImageBackground>
-            ) : (
-              <View style={styles.quoteOverlay}>
-                <Text style={styles.quoteCardTitle}>Passage of the Day</Text>
-                <Text style={styles.quoteText}>"{dailyQuote.text}"</Text>
-                <Text style={styles.quoteAuthor}>
-                  {`— ${dailyQuote.author}${dailyQuote.work ? `, ${dailyQuote.work}` : ''}`}
-                </Text>
-              </View>
+              />
             )}
-          </View>
+            <View style={styles.quoteOverlay}>
+              <Text style={styles.quoteCardTitle}>Passage of the Day</Text>
+              <Text style={styles.quoteText} numberOfLines={11}>
+                "{dailyQuote.text}"
+              </Text>
+              <Text style={styles.quoteAuthor}>
+                {`— ${dailyQuote.author}${dailyQuote.work ? `, ${dailyQuote.work}` : ''}`}
+              </Text>
+            </View>
+          </TouchableOpacity>
         ) : null}
 
         <View style={styles.promptsSection}>
@@ -532,7 +597,9 @@ export default function ChatScreen() {
                 style={styles.promptButton}
                 onPress={() => startChatWithPrompt(prompt.title)}
               >
-                <Text style={styles.promptIcon}>{prompt.icon}</Text>
+                <View style={styles.promptIconCircle}>
+                  <prompt.Icon size={22} color={theme.colors.primary} />
+                </View>
                 <Text style={styles.promptText}>{prompt.title}</Text>
               </TouchableOpacity>
             ))}
@@ -558,13 +625,89 @@ export default function ChatScreen() {
         visible={showProfileDrawer}
         onClose={() => setShowProfileDrawer(false)}
       />
+
+      {/* Passage of the Day Modal */}
+      <Modal
+        visible={showPassageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPassageModal(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowPassageModal(false)}>
+          <View style={styles.passageModalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.passageModalCard}>
+            {passageBackgroundImage && (
+              <Image
+                source={passageBackgroundImage}
+                style={styles.passageModalImage}
+              />
+            )}
+            <View style={styles.passageModalImageOverlay} />
+
+            <TouchableOpacity
+              style={styles.passageModalClose}
+              onPress={() => setShowPassageModal(false)}
+            >
+              <XMarkIcon size={20} color={theme.colors.text} />
+            </TouchableOpacity>
+
+            <View style={styles.passageModalContent}>
+              <Text style={styles.passageModalTitle}>Passage of the Day</Text>
+              <Text style={styles.passageModalQuote}>
+                "{dailyQuote?.text}"
+              </Text>
+              <Text style={styles.passageModalAuthor}>
+                {`— ${dailyQuote?.author}${dailyQuote?.work ? `, ${dailyQuote.work}` : ''}`}
+              </Text>
+            </View>
+
+              </View>
+            </TouchableWithoutFeedback>
+
+            <View style={styles.passageModalActions}>
+              <TouchableOpacity
+                style={styles.passageModalShareBtn}
+                onPress={async () => {
+                  try {
+                    await Share.share({
+                      message: `"${dailyQuote?.text}"\n\n— ${dailyQuote?.author}${dailyQuote?.work ? `, ${dailyQuote.work}` : ''}`,
+                      title: 'Passage of the Day',
+                    });
+                  } catch (error) {
+                    console.error('Error sharing:', error);
+                  }
+                }}
+              >
+                <ShareIcon size={18} color={theme.colors.text} />
+                <Text style={styles.passageModalShareText}>Share</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.passageModalChatBtn}
+                onPress={() => {
+                  setShowPassageModal(false);
+                  startChatWithPrompt(`Help me understand this passage: "${dailyQuote?.text}"`);
+                }}
+              >
+                <ChatBubbleLeftIcon size={18} color={theme.colors.background} />
+                <Text style={styles.passageModalChatText}>Chat about this</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  chatOverlay: {
+    zIndex: 10,
     backgroundColor: theme.colors.background,
   },
   landingContent: {
@@ -592,9 +735,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  historyButtonIcon: {
-    fontSize: 20,
-  },
   landingIcon: {
     fontSize: 36,
     marginBottom: 6,
@@ -609,24 +749,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 20,
     minHeight: 140,
+    maxHeight: Dimensions.get('window').width - 32,
     overflow: 'hidden',
   },
   quoteBackgroundImage: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
-    minHeight: 140,
-    justifyContent: 'center',
-  },
-  quoteBackgroundImageStyle: {
-    borderRadius: 12,
+    aspectRatio: 1,
   },
   quoteOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     padding: 16,
     minHeight: 140,
     justifyContent: 'center',
   },
   quoteCardTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: theme.colors.primary,
     marginBottom: 10,
@@ -676,23 +817,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 2,
   },
   promptButton: {
     width: '48%',
-    backgroundColor: theme.colors.backgroundCard,
+    backgroundColor: theme.colors.quaternary,
     borderRadius: 10,
     padding: 12,
     marginBottom: 10,
     alignItems: 'center',
   },
-  promptIcon: {
-    fontSize: 26,
+  promptIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 6,
   },
   promptText: {
-    fontSize: 12,
-    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.secondary,
     textAlign: 'center',
   },
   orText: {
@@ -709,7 +856,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   startChatButtonText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
     color: theme.colors.background,
   },
@@ -809,8 +956,112 @@ const styles = StyleSheet.create({
   sendButtonTextDisabled: {
     color: theme.colors.textTertiary,
   },
-  typingContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  // Passage of the Day Modal
+  passageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  passageModalCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    maxHeight: Dimensions.get('window').width - 40,
+  },
+  passageModalImage: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    aspectRatio: 1,
+  },
+  passageModalImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  passageModalClose: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  passageModalContent: {
+    padding: 24,
+    paddingTop: 20,
+    justifyContent: 'center',
+    minHeight: 280,
+  },
+  passageModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    textAlign: 'center',
+    marginBottom: 10,
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  passageModalQuote: {
+    fontSize: 19,
+    lineHeight: 28,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginBottom: 16,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  passageModalAuthor: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  passageModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  passageModalShareBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: theme.colors.backgroundCard,
+  },
+  passageModalShareText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  passageModalChatBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: theme.colors.primary,
+  },
+  passageModalChatText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.background,
   },
 });

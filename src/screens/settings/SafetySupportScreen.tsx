@@ -5,6 +5,13 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import {
+  QuestionMarkCircleIcon,
+  EnvelopeIcon,
+  BugAntIcon,
+  DocumentTextIcon,
+} from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 import type { MainStackParamList } from '../../navigation/MainNavigator';
 
@@ -40,6 +47,7 @@ export default function SafetySupportScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -50,21 +58,21 @@ export default function SafetySupportScreen() {
         <SettingsRow
           type="navigate"
           label="Help & FAQ"
-          icon="❓"
+          icon={<QuestionMarkCircleIcon size={20} color={theme.colors.tertiary} />}
           onPress={() => navigation.navigate('HelpFAQ')}
           isFirst
         />
         <SettingsRow
           type="link"
           label="Contact Support"
-          icon="✉️"
+          icon={<EnvelopeIcon size={20} color={theme.colors.tertiary} />}
           subtitle="hello@senecachat.com"
           onPress={handleContactSupport}
         />
         <SettingsRow
           type="link"
           label="Report a Problem"
-          icon="🐛"
+          icon={<BugAntIcon size={20} color={theme.colors.tertiary} />}
           subtitle="Send us a bug report via email"
           onPress={handleReportProblem}
           isLast
@@ -74,7 +82,7 @@ export default function SafetySupportScreen() {
         <SettingsRow
           type="navigate"
           label="Community Guidelines"
-          icon="📜"
+          icon={<DocumentTextIcon size={20} color={theme.colors.tertiary} />}
           onPress={() =>
             navigation.navigate('LegalDocument', {
               documentKey: 'community',
@@ -86,13 +94,13 @@ export default function SafetySupportScreen() {
         />
       </ScrollView>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,

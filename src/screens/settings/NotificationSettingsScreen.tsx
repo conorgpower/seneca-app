@@ -12,6 +12,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import {
+  BellIcon,
+  CalendarDaysIcon,
+  FireIcon,
+  UserGroupIcon,
+  ClockIcon,
+} from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 import {
   requestNotificationPermissions,
@@ -232,6 +240,7 @@ export default function NotificationSettingsScreen() {
   const timeDisplay = `${prefs.reminderHour.toString().padStart(2, '0')}:${prefs.reminderMinute.toString().padStart(2, '0')}`;
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -242,7 +251,7 @@ export default function NotificationSettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Push Notifications"
-          icon="🔔"
+          icon={<BellIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.pushEnabled}
           onValueChange={handleTogglePush}
           isFirst
@@ -253,7 +262,7 @@ export default function NotificationSettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Daily Reminder"
-          icon="📅"
+          icon={<CalendarDaysIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.dailyReminder}
           onValueChange={(v) => savePrefs({ ...prefs, dailyReminder: v })}
           disabled={!prefs.pushEnabled}
@@ -262,7 +271,7 @@ export default function NotificationSettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Streak Reminder"
-          icon="🔥"
+          icon={<FireIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.streakReminder}
           onValueChange={(v) => savePrefs({ ...prefs, streakReminder: v })}
           disabled={!prefs.pushEnabled}
@@ -270,7 +279,7 @@ export default function NotificationSettingsScreen() {
         <SettingsRow
           type="toggle"
           label="Community Updates"
-          icon="👥"
+          icon={<UserGroupIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.communityUpdates}
           onValueChange={(v) => savePrefs({ ...prefs, communityUpdates: v })}
           disabled={!prefs.pushEnabled}
@@ -281,7 +290,7 @@ export default function NotificationSettingsScreen() {
         <SettingsRow
           type="value"
           label="Reminder Time"
-          icon="🕐"
+          icon={<ClockIcon size={20} color={theme.colors.tertiary} />}
           value={timeDisplay}
           onPress={openTimePicker}
           isFirst
@@ -331,13 +340,13 @@ export default function NotificationSettingsScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,

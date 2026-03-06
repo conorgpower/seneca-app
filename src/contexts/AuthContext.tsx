@@ -17,6 +17,7 @@ import {
   hasNotificationPermission,
   cancelAllReminders,
   scheduleReminders,
+  cancelTrialNudgeReminder,
 } from '../services/notifications.service';
 
 interface AuthContextType {
@@ -73,6 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const tier = RevenueCatService.getSubscriptionTier(info) || undefined;
 
       setHasActiveSubscription(hasPro);
+
+      if (hasPro) {
+        cancelTrialNudgeReminder().catch((err) => {
+          console.error('Failed to cancel trial nudge reminder:', err);
+        });
+      }
 
       const { error } = await UserProfileService.updateSubscriptionStatus(authUserId, hasPro, tier, {
         customerId: info.originalAppUserId || authUserId,

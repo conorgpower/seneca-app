@@ -10,15 +10,27 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import * as StoreReview from 'expo-store-review';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import {
+  BuildingLibraryIcon,
+  DevicePhoneMobileIcon,
+  SparklesIcon,
+  StarIcon,
+} from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
 import { getSupabaseImageSource } from '../../data/asset-cdn';
 
 export default function AboutScreen() {
-  const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const appVersion =
+    Application.nativeApplicationVersion ||
+    Constants.expoConfig?.version ||
+    '1.0.0';
   const buildNumber =
+    Application.nativeBuildVersion ||
     Constants.expoConfig?.ios?.buildNumber ||
     Constants.expoConfig?.android?.versionCode?.toString() ||
     '1';
@@ -62,6 +74,7 @@ export default function AboutScreen() {
   };
 
   return (
+    <AppBackground>
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView
         style={styles.container}
@@ -78,7 +91,7 @@ export default function AboutScreen() {
             />
           ) : (
             <View style={styles.logoFallback}>
-              <Text style={styles.logoFallbackText}>🏛️</Text>
+              <BuildingLibraryIcon size={34} color={theme.colors.tertiary} />
             </View>
           )}
           <Text style={styles.appName}>Seneca Chat</Text>
@@ -89,7 +102,7 @@ export default function AboutScreen() {
         <SettingsRow
           type="value"
           label="Version"
-          icon="📱"
+          icon={<DevicePhoneMobileIcon size={20} color={theme.colors.tertiary} />}
           value={`${appVersion} (${buildNumber})`}
           onPress={() => {}}
           isFirst
@@ -97,14 +110,14 @@ export default function AboutScreen() {
         <SettingsRow
           type="navigate"
           label="What's New"
-          icon="🆕"
+          icon={<SparklesIcon size={20} color={theme.colors.tertiary} />}
           subtitle="Coming Soon"
           onPress={() => Alert.alert('Coming Soon', 'Release notes will be available in a future update.')}
         />
         <SettingsRow
           type="navigate"
           label="Rate Seneca Chat"
-          icon="⭐"
+          icon={<StarIcon size={20} color={theme.colors.tertiary} />}
           onPress={handleRateApp}
           isLast
         />
@@ -118,13 +131,13 @@ export default function AboutScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -153,9 +166,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.backgroundCard,
     borderWidth: 1,
     borderColor: theme.colors.border,
-  },
-  logoFallbackText: {
-    fontSize: 34,
   },
   appName: {
     fontSize: 24,

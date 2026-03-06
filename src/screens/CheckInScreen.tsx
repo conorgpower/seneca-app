@@ -5,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,9 +18,13 @@ import { useToday } from '../contexts/TodayContext';
 import * as TodayService from '../services/today.service';
 import type { MainStackParamList } from '../navigation/MainNavigator';
 import { Ionicons } from '@expo/vector-icons';
+import { FireIcon, FaceFrownIcon } from 'react-native-heroicons/solid';
 import { triggerHaptic } from '../hooks/useAppPreferences';
+import { AnimatedMeshGradient } from '../components/AnimatedMeshGradient';
 
 type NavigationProp = NativeStackNavigationProp<MainStackParamList, 'CheckIn'>;
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Mood labels for each slider value (0-100, stepping by 10)
 const MOOD_LABELS: { [key: number]: string } = {
@@ -96,12 +100,15 @@ export default function CheckInScreen() {
   const currentMoodLabel = MOOD_LABELS[snapToStep(moodValue)] || 'Balanced';
 
   return (
-    <LinearGradient
-      colors={['#A8C5E5', '#E5B3D8', '#F4D4E5']}
-      style={styles.gradientContainer}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
+    <View style={styles.container}>
+      <AnimatedMeshGradient
+        width={SCREEN_WIDTH}
+        height={SCREEN_HEIGHT}
+        borderRadius={0}
+        baseColors={['#0F2E2E', '#1A3D3D']}
+        blobColors={['#6EECD0', '#42C8A8']}
+        duration={8000}
+      />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.headerSection}>
@@ -112,7 +119,7 @@ export default function CheckInScreen() {
             style={styles.closeButton}
             onPress={() => navigation.popToTop()}
           >
-            <Ionicons name="close" size={28} color="rgba(0, 0, 0, 0.7)" />
+            <Ionicons name="close" size={28} color="rgba(255, 255, 255, 0.8)" />
           </TouchableOpacity>
         </View>
 
@@ -134,7 +141,7 @@ export default function CheckInScreen() {
 
         {/* Journey Label */}
         <View style={styles.journeyLabelContainer}>
-          <Text style={styles.journeyIcon}>🧠</Text>
+          <FireIcon size={18} color="rgba(255, 255, 255, 0.85)" />
           <Text style={styles.journeyLabel}>PHILOSOPHY JOURNEY</Text>
           <Text style={styles.journeyDuration}>• 1 MIN</Text>
         </View>
@@ -152,9 +159,12 @@ export default function CheckInScreen() {
               <Text style={styles.moodLabel}>{currentMoodLabel}</Text>
             </View>
 
-            {/* Slider with Icons */}
+            {/* Slider with Icons — icons scale with mood */}
             <View style={styles.sliderRow}>
-              <Text style={styles.sliderIcon}>💔</Text>
+              <FaceFrownIcon
+                size={18 + 12 * (1 - moodValue / 100)}
+                color={theme.colors.tertiary}
+              />
               <View style={styles.sliderContainer}>
                 <Slider
                   style={styles.slider}
@@ -164,12 +174,15 @@ export default function CheckInScreen() {
                   value={moodValue}
                   onValueChange={handleSliderChange}
                   onSlidingComplete={handleSliderComplete}
-                  minimumTrackTintColor="#D97941"
-                  maximumTrackTintColor="rgba(255, 255, 255, 0.4)"
+                  minimumTrackTintColor="#6EECD0"
+                  maximumTrackTintColor="rgba(255, 255, 255, 0.25)"
                   thumbTintColor="#FFFFFF"
                 />
               </View>
-              <Text style={styles.sliderIcon}>🔥</Text>
+              <FireIcon
+                size={18 + 12 * (moodValue / 100)}
+                color={theme.colors.primary}
+              />
             </View>
           </View>
 
@@ -183,20 +196,21 @@ export default function CheckInScreen() {
             disabled={submitting}
           >
             {submitting ? (
-              <ActivityIndicator color="#4A2D6E" />
+              <ActivityIndicator color={theme.colors.background} />
             ) : (
               <Text style={styles.continueButtonText}>Next</Text>
             )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradientContainer: {
+  container: {
     flex: 1,
+    backgroundColor: '#0F2E2E',
   },
   safeArea: {
     flex: 1,
@@ -211,7 +225,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: theme.typography.sizes.xxl,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   closeButton: {
     position: 'absolute',
@@ -220,7 +237,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -238,7 +255,10 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   progressPercentage: {
     fontSize: theme.typography.sizes.sm,
@@ -247,7 +267,7 @@ const styles = StyleSheet.create({
   },
   progressBarTrack: {
     height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -263,18 +283,18 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xl,
     gap: 6,
   },
-  journeyIcon: {
-    fontSize: 18,
-  },
   journeyLabel: {
     fontSize: theme.typography.sizes.xs,
     fontWeight: 'bold',
-    color: 'rgba(0, 0, 0, 0.8)',
+    color: 'rgba(255, 255, 255, 0.85)',
     letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   journeyDuration: {
     fontSize: theme.typography.sizes.xs,
-    color: 'rgba(0, 0, 0, 0.6)',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   content: {
     flex: 1,
@@ -290,9 +310,12 @@ const styles = StyleSheet.create({
   question: {
     fontSize: theme.typography.sizes.xxl,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 36,
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   sliderSection: {
     flex: 1,
@@ -300,31 +323,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   moodLabelContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.xl * 1.5,
     marginBottom: theme.spacing.xl * 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   moodLabel: {
     fontSize: theme.typography.sizes.xxl,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#FFFFFF',
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   sliderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
     gap: theme.spacing.md,
-  },
-  sliderIcon: {
-    fontSize: 24,
   },
   sliderContainer: {
     flex: 1,
@@ -337,13 +357,13 @@ const styles = StyleSheet.create({
     flex: 0.2,
   },
   continueButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.xl,
     paddingVertical: theme.spacing.md + 2,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 4,
   },
@@ -353,6 +373,6 @@ const styles = StyleSheet.create({
   continueButtonText: {
     fontSize: theme.typography.sizes.lg,
     fontWeight: '600',
-    color: '#000000',
+    color: theme.colors.background,
   },
 });

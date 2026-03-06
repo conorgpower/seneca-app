@@ -30,10 +30,23 @@ function getDayOfYearSeed(): number {
   );
 }
 
+function getLocalDateString(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+// In-memory cache keyed by date + params to avoid redundant Supabase calls
+const quoteCache = new Map<string, PhilosophicalQuote>();
+
 async function getDeterministicDailyQuote(
   params: DailyQuoteParams = {}
 ): Promise<PhilosophicalQuote | null> {
   const { filterAuthor = null, maxQuoteLength = null } = params;
+
+  // Check in-memory cache
+  const cacheKey = `${getLocalDateString()}:${filterAuthor || ''}:${maxQuoteLength || ''}`;
+  const cached = quoteCache.get(cacheKey);
+  if (cached) return cached;
 
   try {
     let query = supabase
@@ -68,7 +81,12 @@ async function getDeterministicDailyQuote(
 
     const dayOfYear = getDayOfYearSeed();
     const index = dayOfYear % filteredData.length;
-    return filteredData[index] as PhilosophicalQuote;
+    const result = filteredData[index] as PhilosophicalQuote;
+
+    // Store in memory cache
+    quoteCache.set(cacheKey, result);
+
+    return result;
   } catch (error) {
     console.error('Error in getDeterministicDailyQuote:', error);
     return null;

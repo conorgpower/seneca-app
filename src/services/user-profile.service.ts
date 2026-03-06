@@ -20,7 +20,9 @@ export interface UserProfile {
 }
 
 /**
- * Save onboarding answers to user profile
+ * Save onboarding answers to user profile.
+ * Uses upsert to avoid a race condition where the client calls UPDATE before
+ * the database trigger (on_auth_user_created) has created the row.
  */
 export async function saveOnboardingAnswers(
   userId: string,
@@ -29,14 +31,17 @@ export async function saveOnboardingAnswers(
   try {
     const { error } = await supabase
       .from('user_profiles')
-      .update({
-        onboarding_answers: answers,
-        onboarding_completed_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
+      .upsert(
+        {
+          id: userId,
+          onboarding_answers: answers,
+          onboarding_completed_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
 
     if (error) throw error;
-    
+
     return { error: null };
   } catch (error: any) {
     console.error('Error saving onboarding answers:', error);

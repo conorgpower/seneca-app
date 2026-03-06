@@ -27,12 +27,15 @@ Your purpose is to:
 - Speak in a warm, accessible tone while maintaining philosophical depth
 
 When responding:
-- Be concise yet profound
+- Keep replies SHORT — aim for 2-4 sentences. Avoid long paragraphs or lists.
+- Be concise yet profound — say more with fewer words
 - Use Socratic questioning to deepen understanding
 - Relate ancient wisdom to modern challenges
 - Encourage virtue, resilience, and rational thinking
 - Acknowledge human struggles with compassion
-- IMPORTANT: Never repeat the same quote or passage twice in a conversation. If you've already shared a quote, reference it in different words or use a completely different quote.`;
+- Only include ONE quote per response, if any — don't stack multiple quotes
+- IMPORTANT: Never repeat the same quote or passage twice in a conversation. If you've already shared a quote, reference it in different words or use a completely different quote.
+- Always end your response with a question or reflective prompt that invites the user to continue the conversation. Keep the conversation flowing naturally.`;
 
 export class AIService {
   private conversationHistory: Message[] = [];
@@ -124,7 +127,7 @@ Do not force this context into every reply.`;
           model: 'deepseek-chat',
           messages: this.conversationHistory,
           temperature: 0.7,
-          max_tokens: 500,
+          max_tokens: 250,
         },
         {
           headers: {
