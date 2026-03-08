@@ -43,6 +43,7 @@ assets/audio/
 assets/images/*
 !assets/images/widget-small.png
 !assets/images/widget-large.png
+assets/gifs/
 assets/mascot/
 
 # generated native folders
