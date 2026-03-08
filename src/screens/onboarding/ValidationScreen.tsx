@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import OnboardingProgressBar from '../../components/OnboardingProgressBar';
+import { getSupabaseImageSource } from '../../data/asset-cdn';
 
 interface ValidationScreenProps {
   onComplete: () => void;
@@ -20,7 +24,6 @@ export default function ValidationScreen({
 }: ValidationScreenProps) {
   // Animation values
   const scaleAnim = useRef(new Animated.Value(0)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
   const [stat1, setStat1] = useState(0);
   const [stat2, setStat2] = useState(0);
 
@@ -40,13 +43,6 @@ export default function ValidationScreen({
         useNativeDriver: true,
       }),
     ]).start();
-
-    // Subtle rotation
-    Animated.timing(rotateAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
 
     // Count up animation for stats
     const stat1Interval = setInterval(() => {
@@ -75,28 +71,23 @@ export default function ValidationScreen({
     };
   }, []);
 
-  const rotation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-10deg', '0deg'],
-  });
-
-  // Map desired-state values to natural validation messages
   const getValidationMessage = (): string => {
     switch (desiredState) {
       case 'calm-pressure':
-        return 'Feeling calm under pressure is absolutely within your reach.';
+        return 'Calm under pressure';
       case 'clear-decisive':
-        return 'Becoming clear and decisive is a realistic, proven goal.';
+        return 'Clear and decisive';
       case 'consistent':
-        return 'Building real consistency is something you can achieve.';
+        return 'Consistent';
       case 'grounded':
-        return 'Feeling truly grounded is a realistic, achievable goal.';
+        return 'Grounded';
       default:
-        return 'The changes you want to see are absolutely realistic.';
+        return 'The changes you want';
     }
   };
 
   return (
+    <AppBackground topSafeZone={0}>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
@@ -106,11 +97,7 @@ export default function ValidationScreen({
             </TouchableOpacity>
           )}
           {overallProgress !== undefined && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${overallProgress}%` }]} />
-              </View>
-            </View>
+            <OnboardingProgressBar progress={overallProgress} />
           )}
         </View>
 
@@ -121,20 +108,22 @@ export default function ValidationScreen({
         >
           <Animated.View
             style={[
-              styles.iconContainer,
+              styles.mascotContainer,
               {
-                transform: [{ scale: scaleAnim }, { rotate: rotation }],
+                transform: [{ scale: scaleAnim }],
               },
             ]}
           >
-            <Text style={styles.icon}>✓</Text>
+            <Image
+              source={getSupabaseImageSource('mascot/celebrate-animated.gif')!}
+              style={styles.mascotImage}
+            />
           </Animated.View>
 
-          <Text style={styles.title}>This is absolutely achievable</Text>
+          <Text style={styles.title}>{getValidationMessage()}?{'\n'}Absolutely achievable.</Text>
 
           <Text style={styles.message}>
-            {getValidationMessage()}{'\n\n'}
-            Most Seneca users notice clear changes within weeks — without burning out or relapsing.
+            Most users see progress within the first week.
           </Text>
 
           <View style={styles.statsContainer}>
@@ -152,18 +141,18 @@ export default function ValidationScreen({
 
       {/* Continue Button */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.continueButton} onPress={onComplete}>
+        <TouchableOpacity style={styles.continueButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onComplete(); }}>
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -182,20 +171,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.textSecondary,
     fontWeight: '600',
-  },
-  progressContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 2,
   },
   buttonContainer: {
     paddingHorizontal: theme.spacing.xl,
@@ -226,19 +201,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary,
+  mascotContainer: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
-  icon: {
-    fontSize: 40,
-    color: '#FFFFFF',
-    fontWeight: '700',
+  mascotImage: {
+    width: 160,
+    height: 160,
+    resizeMode: 'cover',
   },
   title: {
     fontSize: 28,

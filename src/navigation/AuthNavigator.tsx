@@ -55,8 +55,9 @@ export default function AuthNavigator() {
   const [currentQuestionInPhase, setCurrentQuestionInPhase] = useState(0);
   const lastTrackedScreenKey = React.useRef<string | null>(null);
   const onboardingWarmupRef = React.useRef<{ stop: () => void } | null>(null);
+  const navDirection = React.useRef<'slide_from_right' | 'slide_from_left'>('slide_from_right');
 
-  // Total steps: Phase1(4) + Vision(1) + Phase2(5) + Validation(1) + NotifPermission(1) + Phase3(4) + Momentum(1) + Phase4(2) + TrustSafety(1) + SocialProof(1) + SetupLoading(1) + PlanReady(1) + CreateAccount(1) = 24
+  // Total steps: Phase1(4) + Vision(1) + Phase2(5) + Validation(1) + NotifPermission(1) + Phase3(4) + Momentum(1) + TrustSafety(1) + Phase4(2) + SocialProof(1) + SetupLoading(1) + PlanReady(1) + CreateAccount(1) = 24
   const TOTAL_STEPS = 24;
   const PHASE_QUESTIONS = [4, 5, 4, 2]; // Questions per phase
 
@@ -77,10 +78,10 @@ export default function AuthNavigator() {
       return 12 + currentQuestionInPhase + 1;
     } else if (currentFlow === 'momentum') {
       return 17;
-    } else if (currentFlow === 'questions-4') {
-      return 17 + currentQuestionInPhase + 1;
     } else if (currentFlow === 'trust-safety') {
-      return 20;
+      return 18;
+    } else if (currentFlow === 'questions-4') {
+      return 18 + currentQuestionInPhase + 1;
     } else if (currentFlow === 'social-proof') {
       return 21;
     } else if (currentFlow === 'setup-loading') {
@@ -221,12 +222,14 @@ export default function AuthNavigator() {
   }, []);
 
   const handleGetStarted = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('questions-1');
     setQuestionPhase(1);
     setCurrentQuestionInPhase(0);
   };
 
   const handleQuestionsComplete = (answers: Record<string, any>) => {
+    navDirection.current = 'slide_from_right';
     setOnboardingAnswers({ ...onboardingAnswers, ...answers });
 
     // Determine next step based on current phase
@@ -237,17 +240,19 @@ export default function AuthNavigator() {
     } else if (questionPhase === 3) {
       setCurrentFlow('momentum');
     } else if (questionPhase === 4) {
-      setCurrentFlow('trust-safety');
+      setCurrentFlow('social-proof');
     }
   };
 
   const handleVisionContrastComplete = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('questions-2');
     setQuestionPhase(2);
     setCurrentQuestionInPhase(0);
   };
 
   const handleValidationComplete = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('notification-permission');
   };
 
@@ -258,30 +263,36 @@ export default function AuthNavigator() {
       });
     }
 
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('questions-3');
     setQuestionPhase(3);
     setCurrentQuestionInPhase(0);
   };
 
   const handleMomentumComplete = () => {
+    navDirection.current = 'slide_from_right';
+    setCurrentFlow('trust-safety');
+  };
+
+  const handleTrustSafetyComplete = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('questions-4');
     setQuestionPhase(4);
     setCurrentQuestionInPhase(0);
   };
 
-  const handleTrustSafetyComplete = () => {
-    setCurrentFlow('social-proof');
-  };
-
   const handleSocialProofComplete = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('setup-loading');
   };
 
   const handleSetupLoadingComplete = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('plan-ready');
   };
 
   const handlePlanReadyContinue = () => {
+    navDirection.current = 'slide_from_right';
     if (isAuthenticated) {
       setCurrentFlow('paywall');
       return;
@@ -341,7 +352,7 @@ export default function AuthNavigator() {
 
       // Persist onboarding answers for social sign-ins as soon as auth succeeds.
       if (Object.keys(onboardingAnswers).length > 0) {
-        await UserProfileService.saveOnboardingAnswers(user.id, onboardingAnswers);
+        await UserProfileService.saveOnboardingAnswers(user.id, onboardingAnswers, user.email);
       }
 
       const { profile } = await UserProfileService.getUserProfile(user.id);
@@ -392,14 +403,17 @@ export default function AuthNavigator() {
   };
 
   const handleNavigateToLogin = () => {
+    navDirection.current = 'slide_from_right';
     setCurrentFlow('login');
   };
 
   const handleBackFromLogin = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('welcome');
   };
 
   const handleBackFromQuestions = async () => {
+    navDirection.current = 'slide_from_left';
     if (questionPhase === 1) {
       if (isAuthenticated) {
         await signOut();
@@ -410,51 +424,60 @@ export default function AuthNavigator() {
     } else if (questionPhase === 3) {
       setCurrentFlow('notification-permission');
     } else {
-      setCurrentFlow('momentum');
+      setCurrentFlow('trust-safety');
     }
   };
 
   const handleBackFromCreateAccount = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('plan-ready');
   };
 
   const handleBackFromVisionContrast = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('questions-1');
     setQuestionPhase(1);
     setCurrentQuestionInPhase(3); // Last question of phase 1 (0-indexed, so 3 = 4th question)
   };
 
   const handleBackFromValidation = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('questions-2');
     setQuestionPhase(2);
     setCurrentQuestionInPhase(4); // Last question of phase 2
   };
 
   const handleBackFromNotificationPermission = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('validation');
   };
 
   const handleBackFromMomentum = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('questions-3');
     setQuestionPhase(3);
     setCurrentQuestionInPhase(3); // Last question of phase 3
   };
 
   const handleBackFromTrustSafety = () => {
+    navDirection.current = 'slide_from_left';
+    setCurrentFlow('momentum');
+  };
+
+  const handleBackFromSocialProof = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('questions-4');
     setQuestionPhase(4);
     setCurrentQuestionInPhase(1); // Last question of phase 4 (0-indexed, so 1 = 2nd question)
   };
 
-  const handleBackFromSocialProof = () => {
-    setCurrentFlow('trust-safety');
-  };
-
   const handleBackFromSetupLoading = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('social-proof');
   };
 
   const handleBackFromPlanReady = () => {
+    navDirection.current = 'slide_from_left';
     setCurrentFlow('setup-loading');
   };
 
@@ -469,12 +492,18 @@ export default function AuthNavigator() {
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: theme.colors.background },
-        animation: 'slide_from_right',
+        animation: 'none',
       }}
     >
       {currentFlow === 'welcome' && (
         <Stack.Screen name="Welcome">
-          {() => <WelcomeScreen onGetStarted={handleGetStarted} onSignIn={handleNavigateToLogin} />}
+          {() => (
+            <WelcomeScreen
+              onGetStarted={handleGetStarted}
+              onSocialAuth={handleSocialAuth}
+              onContinueWithEmail={handleNavigateToLogin}
+            />
+          )}
         </Stack.Screen>
       )}
 
@@ -574,7 +603,7 @@ export default function AuthNavigator() {
         </Stack.Screen>
       )}
 
-      {currentFlow === 'paywall' && (
+      {(currentFlow === 'paywall' || (currentFlow === 'create-account' && isAuthenticated)) && (
         <Stack.Screen name="Paywall">
           {() => <PaywallScreen onSubscribe={handleSubscribe} />}
         </Stack.Screen>

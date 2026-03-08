@@ -26,19 +26,20 @@ export interface UserProfile {
  */
 export async function saveOnboardingAnswers(
   userId: string,
-  answers: Record<string, any>
+  answers: Record<string, any>,
+  email?: string
 ): Promise<{ error: Error | null }> {
   try {
+    const row: Record<string, any> = {
+      id: userId,
+      onboarding_answers: answers,
+      onboarding_completed_at: new Date().toISOString(),
+    };
+    if (email) row.email = email;
+
     const { error } = await supabase
       .from('user_profiles')
-      .upsert(
-        {
-          id: userId,
-          onboarding_answers: answers,
-          onboarding_completed_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      );
+      .upsert(row, { onConflict: 'id' });
 
     if (error) throw error;
 

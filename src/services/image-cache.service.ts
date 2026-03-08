@@ -28,10 +28,19 @@ const CHAT_SCREEN_IMAGE_PATHS = [
 ];
 
 const ONBOARDING_FLOW_IMAGE_PATHS = [
-  'images/comic/seneca.webp',
+  // Welcome screen (sign-in bottom sheet)
   'images/logos/apple-white.webp',
   'images/logos/google.webp',
+  // Onboarding questions — mascot GIFs in order of appearance
+  'mascot/base-animated_nobg.gif',
+  'mascot/writing-animated_nobg.gif',
+  'mascot/calendar-animated_nobg.gif',
+  'mascot/celebrate-animated.gif',
+  'gifs/reaction-yeah-once.gif',
+  // Post-onboarding screens
   'images/logos/seneca-logo.webp',
+  'images/comic/seneca.webp',
+  'images/app-store-rating_nobg.png',
   'images/social-proof/user1.webp',
   'images/social-proof/user2.webp',
   'images/social-proof/user3.webp',

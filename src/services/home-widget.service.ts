@@ -1,5 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
-import { getSupabaseImageUrl } from '../data/asset-cdn';
+import { Asset } from 'expo-asset';
 
 interface WisdomWidgetNativeModule {
   setWidgetQuotes: (
@@ -13,7 +13,7 @@ interface WisdomWidgetNativeModule {
   setWidgetBackgroundImages?: (
     smallImageUrl: string,
     largeImageUrl: string
-  ) => void;
+  ) => Promise<{ smallOk: boolean; largeOk: boolean; containerPath: string }>;
   // Backward compatibility for older native builds.
   setDailyQuote?: (quoteText: string, author: string) => void;
 }
@@ -65,34 +65,34 @@ export function updateWisdomWidget(payload?: {
   WisdomWidgetModule?.setDailyQuote?.(safeSmallQuote, safeSmallAuthor);
 }
 
-let bgImagesSent = false;
-
-export function updateWidgetBackgroundImages(): void {
-  console.log('[WidgetBG] updateWidgetBackgroundImages called');
-  console.log('[WidgetBG] Platform:', Platform.OS);
-  console.log('[WidgetBG] setWidgetBackgroundImages available:', !!WisdomWidgetModule?.setWidgetBackgroundImages);
-
+export async function updateWidgetBackgroundImages(): Promise<void> {
   if (Platform.OS !== 'ios' || !WisdomWidgetModule?.setWidgetBackgroundImages) {
-    console.log('[WidgetBG] Exiting: platform not iOS or native method not available');
     return;
   }
 
-  if (bgImagesSent) {
-    console.log('[WidgetBG] Exiting: already sent this session');
-    return;
+  const smallAsset = Asset.fromModule(require('../../assets/images/widget-small.png'));
+  const largeAsset = Asset.fromModule(require('../../assets/images/widget-large.png'));
+
+  if (!smallAsset.localUri) {
+    await smallAsset.downloadAsync();
+  }
+  if (!largeAsset.localUri) {
+    await largeAsset.downloadAsync();
   }
 
-  const smallUrl = getSupabaseImageUrl('images/widget-small.webp');
-  const largeUrl = getSupabaseImageUrl('images/widget-large.webp');
-  console.log('[WidgetBG] smallUrl:', smallUrl);
-  console.log('[WidgetBG] largeUrl:', largeUrl);
+  const smallUrl = smallAsset.localUri || smallAsset.uri;
+  const largeUrl = largeAsset.localUri || largeAsset.uri;
 
   if (!smallUrl || !largeUrl) {
     console.log('[WidgetBG] Exiting: missing URL(s)');
     return;
   }
 
-  console.log('[WidgetBG] Calling native setWidgetBackgroundImages');
-  WisdomWidgetModule.setWidgetBackgroundImages(smallUrl, largeUrl);
-  bgImagesSent = true;
+  try {
+    console.log('[WidgetBG] Sending background images to native');
+    const result = await WisdomWidgetModule.setWidgetBackgroundImages(smallUrl, largeUrl);
+    console.log('[WidgetBG] Native result:', JSON.stringify(result));
+  } catch (err) {
+    console.log('[WidgetBG] Native error:', err);
+  }
 }

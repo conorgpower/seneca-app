@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,12 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Video, ResizeMode } from 'expo-av';
 import { PurchasesPackage } from 'react-native-purchases';
 import { theme } from '../theme';
 import { useSubscription } from '../hooks/useSubscription';
 import { trackOnboardingScreenView } from '../services/mixpanel.service';
 import { TERMS, PRIVACY } from '../utils/legalContent';
-import { getSupabaseImageSource } from '../data/asset-cdn';
 import { AppBackground } from '../components/AppBackground';
 
 const { width } = Dimensions.get('window');
@@ -29,18 +29,9 @@ interface PaywallScreenProps {
 }
 
 const FEATURES = [
-  {
-    title: 'Unlimited philosophical conversations',
-    description: 'Chat with AI trained on ancient wisdom',
-  },
-  {
-    title: 'Access great philosopher works',
-    description: 'From Stoicism to Eastern philosophy',
-  },
-  {
-    title: 'Daily wisdom & reflections',
-    description: 'Personalized guidance for your journey',
-  },
+  { title: 'Unlimited philosophical conversations' },
+  { title: 'Access great philosopher works' },
+  { title: 'Daily wisdom & reflections' },
 ];
 
 const TRIAL_TIMELINE = [
@@ -103,7 +94,7 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
     title: '',
     content: '',
   });
-  const senecaImageSource = getSupabaseImageSource('images/comic/seneca.webp');
+  const videoRef = useRef<Video>(null);
 
   const resolvedPackages: ResolvedPackage[] = React.useMemo(() => {
     const current = offerings?.current;
@@ -242,21 +233,21 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
   const renderStep1 = () => (
     <>
       <View style={styles.header}>
-        <Text style={styles.title}>We want you to{'\n'}try Seneca for free.</Text>
+        <Text style={styles.title}>We want you to{'\n'}try Seneca Chat for free.</Text>
       </View>
 
-      <View style={styles.imageContainer}>
-        {senecaImageSource ? (
-          <Image
-            source={senecaImageSource}
-            style={styles.senecaImage}
-            resizeMode="contain"
+      <View style={styles.videoContainer}>
+        <View style={styles.videoCrop}>
+          <Video
+            ref={videoRef}
+            source={require('../../assets/video/check-in-demo.mov')}
+            style={styles.demoVideo}
+            resizeMode={ResizeMode.COVER}
+            shouldPlay
+            isLooping
+            isMuted
           />
-        ) : (
-          <View style={styles.senecaImageFallback}>
-            <Text style={styles.senecaImageFallbackText}>🏛️</Text>
-          </View>
-        )}
+        </View>
       </View>
 
       <View style={styles.featuresContainer}>
@@ -267,7 +258,6 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
             </View>
             <View style={styles.featureTextContainer}>
               <Text style={styles.featureTitle}>{feature.title}</Text>
-              <Text style={styles.featureDescription}>{feature.description}</Text>
             </View>
           </View>
         ))}
@@ -331,8 +321,7 @@ export default function PaywallScreen({ onSubscribe, onSkip, onBack }: PaywallSc
               </View>
               <View style={styles.featureTextContainer}>
                 <Text style={styles.featureTitle}>{feature.title}</Text>
-                <Text style={styles.featureDescription}>{feature.description}</Text>
-              </View>
+                </View>
             </View>
           ))}
         </View>
@@ -590,7 +579,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingTop: 0,
   },
   fixedBottom: {
     backgroundColor: theme.colors.background,
@@ -600,34 +589,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
-  imageContainer: {
+  videoContainer: {
     alignItems: 'center',
     marginBottom: theme.spacing.lg,
   },
-  senecaImage: {
-    width: width * 0.6,
-    height: width * 0.6,
+  videoCrop: {
+    width: width * 0.75,
+    height: width * 0.95,
     maxWidth: 300,
-    maxHeight: 300,
-    borderRadius: width * 0.3,
+    maxHeight: 380,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
-  senecaImageFallback: {
-    width: width * 0.6,
-    height: width * 0.6,
-    maxWidth: 300,
-    maxHeight: 300,
-    borderRadius: width * 0.3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.backgroundCard,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  senecaImageFallbackText: {
-    fontSize: 56,
+  demoVideo: {
+    width: '100%',
+    height: '110%',
+    marginTop: '-6%',
   },
   header: {
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.sm,
     alignItems: 'center',
   },
   step2Header: {
@@ -651,12 +631,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   featuresContainer: {
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.sm,
   },
   featureRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: theme.spacing.lg,
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
   },
   checkmark: {
     width: 28,

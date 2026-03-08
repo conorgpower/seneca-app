@@ -4,7 +4,7 @@ export default {
   expo: {
     name: 'Seneca Chat',
     slug: 'seneca-app',
-    version: '1.0.0',
+    version: '2.0.0',
     icon: './assets/icon.png',
     orientation: 'portrait',
     userInterfaceStyle: 'light',

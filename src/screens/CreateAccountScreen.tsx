@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
+import OnboardingProgressBar from '../components/OnboardingProgressBar';
 import { TERMS, PRIVACY } from '../utils/legalContent';
 import { getSupabaseImageSource } from '../data/asset-cdn';
 
@@ -127,11 +128,7 @@ export default function CreateAccountScreen({
           <View style={styles.header}>
             {/* Progress Bar */}
             {overallProgress !== undefined && (
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${overallProgress}%` }]} />
-                </View>
-              </View>
+              <OnboardingProgressBar progress={overallProgress} />
             )}
 
             <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -401,20 +398,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.md,
     lineHeight: 24,
-  },
-  progressContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 2,
   },
   socialContainer: {
     gap: theme.spacing.md,

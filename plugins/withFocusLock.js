@@ -97,9 +97,32 @@ class FocusLockModule: NSObject {
           if let encoded = try? PropertyListEncoder().encode(selection) {
             defaults?.set(encoded, forKey: "focus_lock_selection")
           }
-          let count = selection.applicationTokens.count
+
+          // Count both individual apps and categories
+          let appTokenCount = selection.applicationTokens.count
+          let catTokenCount = selection.categoryTokens.count
+          let count = appTokenCount + catTokenCount
           defaults?.set(count, forKey: "focus_lock_app_count")
-          print("[FocusLock] Selection saved — \\(selection.applicationTokens.count) apps, \\(selection.categoryTokens.count) categories")
+          print("[FocusLock] onSave — \\(appTokenCount) appTokens, \\(catTokenCount) catTokens, total: \\(count)")
+
+          // Auto-lock: clear old shields first, then apply new selection
+          self.store.clearAllSettings()
+          if count > 0 {
+            if !selection.applicationTokens.isEmpty {
+              self.store.shield.applications = selection.applicationTokens
+              print("[FocusLock] onSave — shielded \\(appTokenCount) app tokens")
+            }
+            if !selection.categoryTokens.isEmpty {
+              self.store.shield.applicationCategories = .specific(selection.categoryTokens)
+              print("[FocusLock] onSave — shielded \\(catTokenCount) category tokens")
+            }
+            defaults?.set(true, forKey: "focus_lock_enabled")
+            print("[FocusLock] onSave — focus_lock_enabled = true")
+          } else {
+            defaults?.set(false, forKey: "focus_lock_enabled")
+            print("[FocusLock] onSave — no selection, cleared shields")
+          }
+
           topVC.dismiss(animated: true) {
             resolve(["appCount": count])
           }
@@ -160,6 +183,60 @@ class FocusLockModule: NSObject {
     resolve(true)
   }
 
+  // MARK: - Auto Re-lock
+
+  @objc func relockIfNewDay(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    let defaults = UserDefaults(suiteName: suiteName)
+
+    // Only re-lock if there's a saved selection and it was previously unlocked
+    guard let unlockedDateStr = defaults?.string(forKey: "focus_lock_unlocked_date"),
+          let data = defaults?.data(forKey: "focus_lock_selection"),
+          let selection = try? PropertyListDecoder().decode(
+            FamilyActivitySelection.self, from: data
+          )
+    else {
+      resolve(false)
+      return
+    }
+
+    // Check if the unlock was from a previous day
+    let today = Calendar.current.startOfDay(for: Date())
+    let formatter = ISO8601DateFormatter()
+    guard let unlockedDate = formatter.date(from: unlockedDateStr) else {
+      resolve(false)
+      return
+    }
+
+    let unlockDay = Calendar.current.startOfDay(for: unlockedDate)
+    guard unlockDay < today else {
+      resolve(false)
+      return
+    }
+
+    // Already locked — skip
+    let isAlreadyEnabled = defaults?.bool(forKey: "focus_lock_enabled") ?? false
+    if isAlreadyEnabled {
+      resolve(false)
+      return
+    }
+
+    // New day — re-apply shields
+    print("[FocusLock] relockIfNewDay — new day, re-applying shields")
+    if !selection.applicationTokens.isEmpty {
+      store.shield.applications = selection.applicationTokens
+    }
+    if !selection.categoryTokens.isEmpty {
+      store.shield.applicationCategories = .specific(selection.categoryTokens)
+    }
+
+    defaults?.set(true, forKey: "focus_lock_enabled")
+    defaults?.removeObject(forKey: "focus_lock_unlocked_date")
+    resolve(true)
+  }
+
   // MARK: - Status
 
   @objc func getLockStatus(
@@ -198,6 +275,11 @@ class FocusLockModule: NSObject {
     if #available(iOS 16.4, *) {
       for app in selection.applications {
         if let name = app.localizedDisplayName {
+          names.append(name)
+        }
+      }
+      for cat in selection.categories {
+        if let name = cat.localizedDisplayName {
           names.append(name)
         }
       }
@@ -251,24 +333,20 @@ struct FocusLockPickerView: View {
 const FOCUS_LOCK_APP_GRID_SWIFT = `import UIKit
 import SwiftUI
 import FamilyControls
+import ManagedSettings
 import React
 
 @available(iOS 16.0, *)
 struct AppIconGridContent: View {
   let isLocked: Bool
   let refreshTrigger: Int
+  let categoryTokens: [ActivityCategoryToken]
+  let applicationTokens: [ApplicationToken]
 
-  private let appGroupId = "${APP_GROUP_ID}"
   private let goldColor = Color(red: 222.0/255.0, green: 173.0/255.0, blue: 92.0/255.0)
   private let tileBg = Color(red: 28.0/255.0, green: 27.0/255.0, blue: 30.0/255.0)
 
-  private var selection: FamilyActivitySelection? {
-    guard let defaults = UserDefaults(suiteName: appGroupId),
-          let data = defaults.data(forKey: "focus_lock_selection"),
-          let decoded = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data)
-    else { return nil }
-    return decoded
-  }
+  private var totalCount: Int { categoryTokens.count + applicationTokens.count }
 
   @ViewBuilder
   private func iconTile<V: View>(_ icon: V) -> some View {
@@ -294,21 +372,23 @@ struct AppIconGridContent: View {
   }
 
   var body: some View {
-    if let sel = selection {
-      let appTokens = Array(sel.applicationTokens)
-      let maxItems = 11
-      let appsToShow = Array(appTokens.prefix(maxItems))
-      let hasMore = appTokens.count > maxItems
-
+    if totalCount > 0 {
       let columns = Array(repeating: GridItem(.fixed(60), spacing: 12), count: 4)
+      // Show up to 11 icons total: individual apps first, then categories
+      let appSlice = Array(applicationTokens.prefix(11))
+      let catSlots = max(0, 11 - appSlice.count)
+      let catSlice = Array(categoryTokens.prefix(catSlots))
 
       LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-        ForEach(0..<appsToShow.count, id: \\.self) { i in
-          iconTile(Label(appsToShow[i]).labelStyle(.iconOnly))
+        ForEach(appSlice, id: \\.self) { token in
+          iconTile(Label(token).labelStyle(.iconOnly))
+        }
+        ForEach(catSlice, id: \\.self) { token in
+          iconTile(Label(token).labelStyle(.iconOnly))
         }
 
-        if hasMore {
-          Text("+\\(appTokens.count - maxItems)")
+        if totalCount > 11 {
+          Text("+\\(totalCount - 11)")
             .font(.system(size: 14, weight: .bold))
             .foregroundColor(Color(white: 0.69))
             .frame(width: 60, height: 60)
@@ -335,6 +415,7 @@ class FocusLockAppGridHostView: UIView {
   private var hostingController: UIHostingController<AppIconGridContent>?
   private var _isLocked = false
   private var _refreshTrigger = 0
+  private let appGroupId = "${APP_GROUP_ID}"
 
   @objc var isLocked: NSNumber? {
     didSet {
@@ -360,9 +441,40 @@ class FocusLockAppGridHostView: UIView {
     setup()
   }
 
+  /// Sort tokens deterministically by their encoded bytes so the grid order is stable.
+  private func stableSorted<T: Encodable & Hashable>(_ tokens: Set<T>) -> [T] {
+    let encoder = PropertyListEncoder()
+    encoder.outputFormat = .binary
+    let paired: [(T, Data)] = tokens.map { t in
+      let data = (try? encoder.encode(t)) ?? Data()
+      return (t, data)
+    }
+    return paired
+      .sorted { $0.1.lexicographicallyPrecedes($1.1) }
+      .map { $0.0 }
+  }
+
+  private func decodeTokens() -> (cats: [ActivityCategoryToken], apps: [ApplicationToken]) {
+    guard let defaults = UserDefaults(suiteName: appGroupId),
+          let data = defaults.data(forKey: "focus_lock_selection"),
+          let selection = try? PropertyListDecoder().decode(FamilyActivitySelection.self, from: data)
+    else { return ([], []) }
+    return (stableSorted(selection.categoryTokens), stableSorted(selection.applicationTokens))
+  }
+
+  private func makeContent() -> AppIconGridContent {
+    let tokens = decodeTokens()
+    return AppIconGridContent(
+      isLocked: _isLocked,
+      refreshTrigger: _refreshTrigger,
+      categoryTokens: tokens.cats,
+      applicationTokens: tokens.apps
+    )
+  }
+
   private func setup() {
     backgroundColor = .clear
-    let content = AppIconGridContent(isLocked: _isLocked, refreshTrigger: _refreshTrigger)
+    let content = makeContent()
     let hc = UIHostingController(rootView: content)
     hc.view.backgroundColor = .clear
     hc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -377,7 +489,7 @@ class FocusLockAppGridHostView: UIView {
   }
 
   private func refresh() {
-    hostingController?.rootView = AppIconGridContent(isLocked: _isLocked, refreshTrigger: _refreshTrigger)
+    hostingController?.rootView = makeContent()
   }
 }
 `;
@@ -415,6 +527,9 @@ RCT_EXTERN_METHOD(lockApps:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(unlockApps:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(relockIfNewDay:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(getLockStatus:(RCTPromiseResolveBlock)resolve
@@ -481,7 +596,7 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
       ),
       primaryButtonLabel: ShieldConfiguration.Label(
         text: "Dismiss",
-        color: darkBg
+        color: .white
       ),
       primaryButtonBackgroundColor: goldColor
     )

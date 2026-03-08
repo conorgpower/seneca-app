@@ -1,7 +1,11 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FontAwesome6 } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import OnboardingProgressBar from '../../components/OnboardingProgressBar';
 
 interface PlanReadyScreenProps {
   onContinue: () => void;
@@ -42,6 +46,7 @@ export default function PlanReadyScreen({ onContinue, userAnswers, overallProgre
   };
 
   return (
+    <AppBackground topSafeZone={0}>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <View style={styles.header}>
@@ -54,11 +59,7 @@ export default function PlanReadyScreen({ onContinue, userAnswers, overallProgre
 
           {/* Progress Bar */}
           {overallProgress !== undefined && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${overallProgress}%` }]} />
-              </View>
-            </View>
+            <OnboardingProgressBar progress={overallProgress} />
           )}
         </View>
 
@@ -68,30 +69,30 @@ export default function PlanReadyScreen({ onContinue, userAnswers, overallProgre
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.iconContainer}>
-            <Text style={styles.icon}>🎯</Text>
+            <FontAwesome6 name="calendar-check" size={32} color="#FFFFFF" />
           </View>
 
-          <Text style={styles.title}>Your Seneca plan is ready</Text>
+          <Text style={styles.title}>Your Seneca Chat plan is ready</Text>
           <Text style={styles.subtitle}>We've personalized everything based on your answers</Text>
 
           <View style={styles.planContainer}>
             <PlanItem
-              icon="📅"
+              icon="calendar-days"
               label="Reflection schedule"
               value={reflectionTime}
             />
             <PlanItem
-              icon="💬"
+              icon="comment"
               label="Guidance style"
               value={guidanceStyle}
             />
             <PlanItem
-              icon="⚡"
+              icon="bolt"
               label="Change pace"
               value={getPaceDescription()}
             />
             <PlanItem
-              icon="🏛️"
+              icon="building-columns"
               label="Philosophy focus"
               value={getPhilosophyName()}
             />
@@ -112,18 +113,21 @@ export default function PlanReadyScreen({ onContinue, userAnswers, overallProgre
       </View>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.continueButton} onPress={onContinue}>
+        <TouchableOpacity style={styles.continueButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onContinue(); }}>
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 function PlanItem({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
     <View style={styles.planItem}>
-      <Text style={styles.planIcon}>{icon}</Text>
+      <View style={styles.planIconContainer}>
+        <FontAwesome6 name={icon} size={16} color={theme.colors.primary} />
+      </View>
       <View style={styles.planTextContainer}>
         <Text style={styles.planLabel}>{label}</Text>
         <Text style={styles.planValue}>{value}</Text>
@@ -135,7 +139,6 @@ function PlanItem({ icon, label, value }: { icon: string; label: string; value: 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   screen: {
     flex: 1,
@@ -161,9 +164,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: theme.spacing.xl,
   },
-  icon: {
-    fontSize: 40,
-  },
   title: {
     fontSize: 28,
     fontWeight: '700',
@@ -176,12 +176,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-    marginBottom: theme.spacing.xl * 2,
+    marginBottom: theme.spacing.lg,
     lineHeight: 24,
   },
   planContainer: {
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xl * 2,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
   planItem: {
     flexDirection: 'row',
@@ -190,8 +190,13 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     borderRadius: 12,
   },
-  planIcon: {
-    fontSize: 24,
+  planIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: theme.spacing.md,
   },
   planTextContainer: {
@@ -245,20 +250,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textTertiary,
     textAlign: 'center',
-  },
-  progressContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 2,
   },
   backButton: {
     paddingVertical: theme.spacing.sm,

@@ -9,7 +9,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path, Circle, Defs, LinearGradient, Stop, Line } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import OnboardingProgressBar from '../../components/OnboardingProgressBar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -19,187 +23,83 @@ interface VisionContrastScreenProps {
   onBack?: () => void;
 }
 
-// Graph layout
-const GRAPH_H = 180;
-const GRAPH_W = SCREEN_WIDTH - 130; // account for padding + y-axis + balance
+// Graph dimensions
+const GRAPH_PADDING = 24;
+const GRAPH_W = SCREEN_WIDTH - theme.spacing.xl * 2 - GRAPH_PADDING * 2;
+const GRAPH_H = 200;
+// Horizontal inset so circles at edges aren't clipped
+const GRAPH_INSET = 10;
 
-// Normalized points (x: 0-1 time, y: 0-1 clarity)
-// "With Seneca" – steady upward curve
+// Normalized points (x: 0-1 time, y: 0-1 motivation)
+// "Seneca Chat" — steady upward curve
 const WITH_POINTS = [
-  { x: 0, y: 0.12 },
-  { x: 0.12, y: 0.18 },
-  { x: 0.25, y: 0.28 },
-  { x: 0.38, y: 0.40 },
-  { x: 0.50, y: 0.52 },
-  { x: 0.62, y: 0.64 },
-  { x: 0.75, y: 0.75 },
-  { x: 0.88, y: 0.85 },
-  { x: 1.0, y: 0.93 },
+  { x: 0, y: 0.18 },
+  { x: 0.14, y: 0.24 },
+  { x: 0.28, y: 0.34 },
+  { x: 0.42, y: 0.46 },
+  { x: 0.56, y: 0.58 },
+  { x: 0.70, y: 0.68 },
+  { x: 0.85, y: 0.78 },
+  { x: 1.0, y: 0.85 },
 ];
 
-// "Without Seneca" – initial spike then stagnation / slight decline
+// "Traditional motivation" — spikes then fades
 const WITHOUT_POINTS = [
-  { x: 0, y: 0.12 },
-  { x: 0.10, y: 0.30 },
-  { x: 0.22, y: 0.38 },
-  { x: 0.34, y: 0.32 },
-  { x: 0.46, y: 0.36 },
-  { x: 0.58, y: 0.28 },
-  { x: 0.70, y: 0.24 },
-  { x: 0.82, y: 0.22 },
-  { x: 1.0, y: 0.18 },
+  { x: 0, y: 0.18 },
+  { x: 0.10, y: 0.38 },
+  { x: 0.22, y: 0.46 },
+  { x: 0.35, y: 0.40 },
+  { x: 0.48, y: 0.33 },
+  { x: 0.60, y: 0.28 },
+  { x: 0.72, y: 0.25 },
+  { x: 0.85, y: 0.23 },
+  { x: 1.0, y: 0.22 },
 ];
 
 function toPixel(pt: { x: number; y: number }) {
   return {
-    px: pt.x * GRAPH_W,
-    py: (1 - pt.y) * GRAPH_H, // flip y so 0 is bottom
+    px: GRAPH_INSET + pt.x * (GRAPH_W - 2 * GRAPH_INSET),
+    py: (1 - pt.y) * GRAPH_H,
   };
 }
 
-/** Renders a single segment between two points */
-function Segment({
-  from,
-  to,
-  color,
-  anim,
-  index,
-  total,
-}: {
-  from: { x: number; y: number };
-  to: { x: number; y: number };
-  color: string;
-  anim: Animated.Value;
-  index: number;
-  total: number;
-}) {
-  const p1 = toPixel(from);
-  const p2 = toPixel(to);
-  const dx = p2.px - p1.px;
-  const dy = p2.py - p1.py;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-  // Each segment appears during its portion of the animation
-  const segStart = index / total;
-  const segEnd = (index + 1) / total;
-
-  const scaleX = anim.interpolate({
-    inputRange: [segStart, segEnd],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        left: p1.px,
-        top: p1.py - 1.5,
-        width: length,
-        height: 3,
-        backgroundColor: color,
-        borderRadius: 1.5,
-        transform: [
-          { rotate: `${angle}deg` },
-          { scaleX },
-        ],
-        transformOrigin: 'left center',
-      }}
-    />
-  );
-}
-
-/** Renders an animated line from an array of points */
-function AnimatedLine({
-  points,
-  color,
-  anim,
-}: {
-  points: { x: number; y: number }[];
-  color: string;
-  anim: Animated.Value;
-}) {
-  const segments = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    segments.push(
-      <Segment
-        key={i}
-        from={points[i]}
-        to={points[i + 1]}
-        color={color}
-        anim={anim}
-        index={i}
-        total={points.length - 1}
-      />,
-    );
+/** Build a smooth cubic bezier SVG path from points */
+function buildSmoothPath(points: { x: number; y: number }[]): string {
+  if (points.length < 2) return '';
+  const pixels = points.map(toPixel);
+  let d = `M ${pixels[0].px} ${pixels[0].py}`;
+  for (let i = 0; i < pixels.length - 1; i++) {
+    const p0 = pixels[Math.max(0, i - 1)];
+    const p1 = pixels[i];
+    const p2 = pixels[i + 1];
+    const p3 = pixels[Math.min(pixels.length - 1, i + 2)];
+    const tension = 0.3;
+    const cp1x = p1.px + (p2.px - p0.px) * tension;
+    const cp1y = p1.py + (p2.py - p0.py) * tension;
+    const cp2x = p2.px - (p3.px - p1.px) * tension;
+    const cp2y = p2.py - (p3.py - p1.py) * tension;
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.px} ${p2.py}`;
   }
-
-  // End dot
-  const endPt = toPixel(points[points.length - 1]);
-  const dotOpacity = anim.interpolate({
-    inputRange: [0.85, 1],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <>
-      {segments}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          left: endPt.px - 5,
-          top: endPt.py - 5,
-          width: 10,
-          height: 10,
-          borderRadius: 5,
-          backgroundColor: color,
-          opacity: dotOpacity,
-        }}
-      />
-    </>
-  );
+  return d;
 }
 
-/** Animated label that appears at the end of a line */
-function EndLabel({
-  point,
-  label,
-  color,
-  anim,
-  above,
-}: {
-  point: { x: number; y: number };
-  label: string;
-  color: string;
-  anim: Animated.Value;
-  above: boolean;
-}) {
-  const pt = toPixel(point);
-  const opacity = anim.interpolate({
-    inputRange: [0.88, 1],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        left: pt.px - 60,
-        top: above ? pt.py - 28 : pt.py + 14,
-        opacity,
-      }}
-    >
-      <Text style={{ fontSize: 12, fontWeight: '600', color, textAlign: 'right' }}>
-        {label}
-      </Text>
-    </Animated.View>
-  );
+/** Build a closed fill path (line path + close along bottom) */
+function buildFillPath(points: { x: number; y: number }[]): string {
+  const linePath = buildSmoothPath(points);
+  const lastPx = toPixel(points[points.length - 1]);
+  const firstPx = toPixel(points[0]);
+  return `${linePath} L ${lastPx.px} ${GRAPH_H} L ${firstPx.px} ${GRAPH_H} Z`;
 }
 
-const X_LABELS = ['Today', '30 days', '60 days', '90 days'];
+/** Build a closed fill path between two curves (top line forward, bottom line reversed) */
+function buildBetweenPath(topPoints: { x: number; y: number }[], bottomPoints: { x: number; y: number }[]): string {
+  const topPath = buildSmoothPath(topPoints);
+  const reversedPath = buildSmoothPath([...bottomPoints].reverse());
+  return `${topPath} ${reversedPath.replace(/^M/, 'L')} Z`;
+}
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export default function VisionContrastScreen({
   onComplete,
@@ -207,17 +107,71 @@ export default function VisionContrastScreen({
   onBack,
 }: VisionContrastScreenProps) {
   const anim = useRef(new Animated.Value(0)).current;
+  const labelOpacity = useRef(new Animated.Value(0)).current;
+
+  const withPath = buildSmoothPath(WITH_POINTS);
+  const withoutPath = buildSmoothPath(WITHOUT_POINTS);
+  const withoutFillPath = buildFillPath(WITHOUT_POINTS);
+  const betweenFillPath = buildBetweenPath(WITH_POINTS, WITHOUT_POINTS);
+
+  const withLength = 600;
+  const withoutLength = 500;
+
+  const withDashOffset = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [withLength, 0],
+  });
+
+  const withoutDashOffset = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [withoutLength, 0],
+  });
+
+  const fillOpacity = anim.interpolate({
+    inputRange: [0.5, 1],
+    outputRange: [0, 1],
+  });
 
   useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 2200,
-      delay: 500,
-      useNativeDriver: false,
-    }).start();
+    Animated.sequence([
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 2000,
+        delay: 400,
+        useNativeDriver: false,
+      }),
+      Animated.timing(labelOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: false,
+      }),
+    ]).start();
   }, []);
 
+  const startPt = toPixel(WITH_POINTS[0]);
+  const withEnd = toPixel(WITH_POINTS[WITH_POINTS.length - 1]);
+
+  // Four faint dashed horizontal guide lines
+  const dashY1 = toPixel({ x: 0, y: 0.25 }).py;
+  const dashY2 = toPixel({ x: 0, y: 0.40 }).py;
+  const dashY3 = toPixel({ x: 0, y: 0.60 }).py;
+  const dashY4 = toPixel({ x: 0, y: 0.80 }).py;
+
+  // "Traditional motivation" label — far right, fully below the grey (without) line
+  // Without line at x=1.0 is y=0.22 → pixel 156. Place label below that.
+  const withoutEndPt = toPixel(WITHOUT_POINTS[WITHOUT_POINTS.length - 1]);
+  const tradLabelY = withoutEndPt.py + 6;
+
+  // "Seneca Chat" branding position — centered in the primary fill area between curves
+  const brandingPos = toPixel({ x: 0.42, y: 0.46 });
+
+  const handleContinue = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onComplete();
+  };
+
   return (
+    <AppBackground topSafeZone={0}>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
@@ -227,11 +181,7 @@ export default function VisionContrastScreen({
             </TouchableOpacity>
           )}
           {overallProgress !== undefined && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${overallProgress}%` }]} />
-              </View>
-            </View>
+            <OnboardingProgressBar progress={overallProgress} />
           )}
         </View>
 
@@ -240,90 +190,148 @@ export default function VisionContrastScreen({
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>Clarity compounds{'\n'}over time</Text>
-          <Text style={styles.subtitle}>
-            Most people struggle alone with inconsistent progress
-          </Text>
+          <Text style={styles.title}>Seneca Chat creates{'\n'}long-term motivation</Text>
 
-          {/* Graph */}
-          <Text style={styles.graphTitle}>Clarity Over Time</Text>
+          {/* Flex wrapper to center graph card in remaining space */}
           <View style={styles.graphWrapper}>
-            {/* Y-axis */}
-            <View style={styles.yAxis}>
-              <Text style={styles.axisLabel}>High</Text>
-              <Text style={styles.axisLabel}>Low</Text>
+          <View style={styles.graphCard}>
+            <Text style={styles.graphLabel}>Your Motivation</Text>
+
+            <View style={styles.graphArea}>
+              <Svg width={GRAPH_W} height={GRAPH_H + 2}>
+                <Defs>
+                  <LinearGradient id="primaryFill" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={theme.colors.primary} stopOpacity="0.18" />
+                    <Stop offset="1" stopColor={theme.colors.primary} stopOpacity="0.04" />
+                  </LinearGradient>
+                </Defs>
+
+                {/* Four faint dashed guide lines */}
+                <Line x1={0} y1={dashY1} x2={GRAPH_W} y2={dashY1}
+                  stroke="#D0D0D0" strokeWidth={0.8} strokeDasharray="3 5" opacity={0.45} />
+                <Line x1={0} y1={dashY2} x2={GRAPH_W} y2={dashY2}
+                  stroke="#D0D0D0" strokeWidth={0.8} strokeDasharray="3 5" opacity={0.45} />
+                <Line x1={0} y1={dashY3} x2={GRAPH_W} y2={dashY3}
+                  stroke="#D0D0D0" strokeWidth={0.8} strokeDasharray="3 5" opacity={0.45} />
+                <Line x1={0} y1={dashY4} x2={GRAPH_W} y2={dashY4}
+                  stroke="#D0D0D0" strokeWidth={0.8} strokeDasharray="3 5" opacity={0.45} />
+
+                {/* Grey fill under the grey (without) line */}
+                <AnimatedPath
+                  d={withoutFillPath}
+                  fill="#AAAAAA"
+                  opacity={fillOpacity.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 0.1],
+                  })}
+                />
+
+                {/* Primary fill between the two lines (above grey, below black) */}
+                <AnimatedPath
+                  d={betweenFillPath}
+                  fill="url(#primaryFill)"
+                  opacity={fillOpacity}
+                />
+
+                {/* "Traditional motivation" line (grey) */}
+                <AnimatedPath
+                  d={withoutPath}
+                  stroke="#AAAAAA"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                  strokeDasharray={`${withoutLength}`}
+                  strokeDashoffset={withoutDashOffset}
+                />
+
+                {/* "Seneca Chat" line (black) */}
+                <AnimatedPath
+                  d={withPath}
+                  stroke="#1A1A1A"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                  strokeDasharray={`${withLength}`}
+                  strokeDashoffset={withDashOffset}
+                />
+
+                {/* X-axis solid line */}
+                <Line
+                  x1={0} y1={GRAPH_H} x2={GRAPH_W} y2={GRAPH_H}
+                  stroke="#888888" strokeWidth={1}
+                />
+
+                {/* Start circle — white with dark outline */}
+                <AnimatedCircle
+                  cx={startPt.px}
+                  cy={startPt.py}
+                  r={5}
+                  fill="#FFFFFF"
+                  stroke="#1A1A1A"
+                  strokeWidth={2}
+                  opacity={labelOpacity}
+                />
+
+                {/* End circle on Seneca line — white with dark outline */}
+                <AnimatedCircle
+                  cx={withEnd.px}
+                  cy={withEnd.py}
+                  r={5}
+                  fill="#FFFFFF"
+                  stroke="#1A1A1A"
+                  strokeWidth={2}
+                  opacity={labelOpacity}
+                />
+              </Svg>
+
+              {/* "Traditional motivation" label — far right, below the grey line */}
+              <Animated.View style={[styles.tradMotivLabel, {
+                top: tradLabelY,
+                right: 12,
+                opacity: labelOpacity,
+              }]}>
+                <Text style={styles.tradMotivText}>Traditional{'\n'}motivation</Text>
+              </Animated.View>
+
+              {/* "Seneca Chat" branding inside the primary fill area */}
+              <Animated.View style={[styles.brandingInGraph, {
+                top: brandingPos.py - 16,
+                right: 12,
+                opacity: labelOpacity,
+              }]}>
+                <Text style={styles.brandingName}>Seneca Chat</Text>
+                <View style={styles.brandingTag}>
+                  <Text style={styles.brandingTagText}>Motivation</Text>
+                </View>
+              </Animated.View>
             </View>
 
-            <View style={styles.graphOuter}>
-              {/* Grid lines */}
-              <View style={styles.graphBox}>
-                {[0.25, 0.5, 0.75].map((frac) => (
-                  <View
-                    key={frac}
-                    style={[styles.gridLine, { top: frac * GRAPH_H }]}
-                  />
-                ))}
-
-                {/* Lines */}
-                <AnimatedLine points={WITHOUT_POINTS} color={theme.colors.error} anim={anim} />
-                <AnimatedLine points={WITH_POINTS} color={theme.colors.primary} anim={anim} />
-
-                {/* End labels */}
-                <EndLabel
-                  point={WITH_POINTS[WITH_POINTS.length - 1]}
-                  label="With Seneca"
-                  color={theme.colors.primary}
-                  anim={anim}
-                  above
-                />
-                <EndLabel
-                  point={WITHOUT_POINTS[WITHOUT_POINTS.length - 1]}
-                  label="Without"
-                  color={theme.colors.error}
-                  anim={anim}
-                  above={false}
-                />
-              </View>
-
-              {/* X-axis */}
-              <View style={styles.xAxis}>
-                {X_LABELS.map((label) => (
-                  <Text key={label} style={styles.xLabel}>
-                    {label}
-                  </Text>
-                ))}
-              </View>
+            {/* X-axis labels */}
+            <View style={styles.xAxis}>
+              <Text style={styles.xLabel}>Month 1</Text>
+              <Text style={styles.xLabel}>Month 6</Text>
             </View>
           </View>
-
-          {/* Legend */}
-          <View style={styles.legend}>
-            <View style={styles.legendRow}>
-              <View style={[styles.legendLine, { backgroundColor: theme.colors.primary }]} />
-              <Text style={styles.legendText}>With Seneca: steady, compound growth</Text>
-            </View>
-            <View style={styles.legendRow}>
-              <View style={[styles.legendLine, { backgroundColor: theme.colors.error }]} />
-              <Text style={styles.legendText}>Alone: motivation spikes, then drop-offs</Text>
-            </View>
           </View>
         </ScrollView>
       </View>
 
       {/* Continue */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.continueButton} onPress={onComplete}>
+        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -337,8 +345,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
+    flexGrow: 1,
     paddingHorizontal: theme.spacing.xl,
     paddingBottom: theme.spacing.xl,
+  },
+  graphWrapper: {
+    flex: 1,
+    justifyContent: 'center',
   },
   backButton: {
     paddingVertical: theme.spacing.sm,
@@ -351,120 +364,85 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: '600',
   },
-  progressContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 2,
-  },
   title: {
     fontSize: 32,
     fontWeight: '700',
     color: theme.colors.text,
-    textAlign: 'center',
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.xl,
     lineHeight: 40,
   },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.xl * 1.5,
-    lineHeight: 24,
+
+  // Graph card
+  graphCard: {
+    backgroundColor: '#F7F5F0',
+    borderRadius: 20,
+    padding: GRAPH_PADDING,
+    overflow: 'hidden',
   },
-  graphTitle: {
-    fontSize: 17,
+  graphLabel: {
+    fontSize: 18,
     fontWeight: '600',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.lg,
-    textAlign: 'center',
+    color: '#1A1A1A',
+    marginBottom: 16,
   },
-  graphWrapper: {
-    flexDirection: 'row',
-    marginBottom: theme.spacing.xl,
-    marginLeft: -12,
+  graphArea: {
+    position: 'relative',
   },
-  yAxis: {
-    width: 36,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingRight: 6,
-    paddingBottom: 28,
-  },
-  axisLabel: {
-    fontSize: 11,
-    color: theme.colors.textTertiary,
-  },
-  graphOuter: {
-    flex: 1,
-  },
-  graphBox: {
-    height: GRAPH_H,
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'visible',
-  },
-  gridLine: {
+  tradMotivLabel: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: theme.colors.border,
-    opacity: 0.3,
+  },
+  tradMotivText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#999999',
+    lineHeight: 14,
+    textAlign: 'right',
   },
   xAxis: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: theme.spacing.sm,
-    paddingRight: theme.spacing.sm,
+    marginTop: 8,
   },
   xLabel: {
+    fontSize: 12,
+    color: '#888888',
+    fontWeight: '500',
+  },
+
+  // Branding inside the primary fill area
+  brandingInGraph: {
+    position: 'absolute',
+    alignItems: 'flex-start',
+  },
+  brandingName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  brandingTag: {
+    backgroundColor: '#E8E5E0',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  brandingTagText: {
     fontSize: 11,
-    color: theme.colors.textTertiary,
+    fontWeight: '600',
+    color: '#888888',
   },
-  legend: {
-    gap: theme.spacing.md,
-    backgroundColor: theme.colors.backgroundCard,
-    padding: theme.spacing.lg,
-    borderRadius: 12,
-  },
-  legendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  legendLine: {
-    width: 20,
-    height: 3,
-    borderRadius: 2,
-  },
-  legendText: {
-    flex: 1,
-    fontSize: 14,
-    color: theme.colors.text,
-    lineHeight: 20,
-  },
+
+  // Button
   buttonContainer: {
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
   continueButton: {
     width: '100%',
     paddingVertical: theme.spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 30,
     backgroundColor: theme.colors.primary,
   },
   continueButtonText: {

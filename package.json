@@ -1,6 +1,6 @@
 {
   "name": "seneca-app",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@quidone/react-native-wheel-picker": "^1.6.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/slider": "5.0.1",
@@ -37,6 +38,7 @@
     "expo-asset": "~12.0.12",
     "expo-audio": "~1.1.1",
     "expo-auth-session": "~7.0.10",
+    "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",
     "expo-constants": "^18.0.13",
     "expo-device": "^8.0.10",

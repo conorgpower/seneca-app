@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FontAwesome6 } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import OnboardingProgressBar from '../../components/OnboardingProgressBar';
 
 interface SetupLoadingScreenProps {
   onComplete: () => void;
@@ -10,11 +14,11 @@ interface SetupLoadingScreenProps {
 }
 
 const SETUP_STEPS = [
-  'Reflection cadence',
-  'Prompt style',
-  'Challenge level',
-  'Philosophy blend',
-  'Guidance tone',
+  { label: 'Reflection cadence', icon: 'clock-rotate-left' },
+  { label: 'Prompt style', icon: 'pen-fancy' },
+  { label: 'Challenge level', icon: 'fire' },
+  { label: 'Philosophy blend', icon: 'book-open' },
+  { label: 'Guidance tone', icon: 'comment' },
 ];
 
 export default function SetupLoadingScreen({ onComplete, overallProgress, onBack }: SetupLoadingScreenProps) {
@@ -51,6 +55,7 @@ export default function SetupLoadingScreen({ onComplete, overallProgress, onBack
   });
 
   return (
+    <AppBackground topSafeZone={0}>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
@@ -64,7 +69,7 @@ export default function SetupLoadingScreen({ onComplete, overallProgress, onBack
 
         <View style={styles.contentContainer}>
           <View style={styles.iconContainer}>
-            <Text style={styles.icon}>⚙️</Text>
+            <FontAwesome6 name="wand-magic-sparkles" size={32} color={theme.colors.primary} />
           </View>
 
           <Text style={styles.title}>Setting up your experience...</Text>
@@ -83,27 +88,29 @@ export default function SetupLoadingScreen({ onComplete, overallProgress, onBack
           <View style={styles.checklistContainer}>
             {SETUP_STEPS.map((step, index) => (
               <Animated.View
-                key={step}
+                key={step.label}
                 style={[
                   styles.checklistItem,
                   {
                     opacity: fadeAnims[index],
+                    transform: [
+                      {
+                        translateX: fadeAnims[index].interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-20, 0],
+                        }),
+                      },
+                    ],
                   },
                 ]}
               >
-                <View style={styles.checkbox}>
-                  <Animated.Text
-                    style={[
-                      styles.checkmark,
-                      {
-                        opacity: fadeAnims[index],
-                      },
-                    ]}
-                  >
-                    ✓
-                  </Animated.Text>
+                <View style={styles.stepIconContainer}>
+                  <FontAwesome6 name={step.icon} size={14} color={theme.colors.primary} />
                 </View>
-                <Text style={styles.checklistText}>{step}</Text>
+                <Text style={styles.checklistText}>{step.label}</Text>
+                <View style={styles.checkbox}>
+                  <FontAwesome6 name="check" size={11} color="#FFFFFF" />
+                </View>
               </Animated.View>
             ))}
           </View>
@@ -116,20 +123,20 @@ export default function SetupLoadingScreen({ onComplete, overallProgress, onBack
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={[styles.continueButton, !isLoaded && styles.continueButtonDisabled]}
-          onPress={onComplete}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onComplete(); }}
           disabled={!isLoaded}
         >
           <Text style={[styles.continueButtonText, !isLoaded && styles.continueButtonTextDisabled]}>Continue</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -145,16 +152,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: theme.colors.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.xl,
-  },
-  icon: {
-    fontSize: 40,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   title: {
     fontSize: 24,
@@ -185,26 +191,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.backgroundCard,
-    padding: theme.spacing.md,
-    borderRadius: 12,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: theme.colors.primary,
+  stepIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.background,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: theme.spacing.md,
   },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checklistText: {
     flex: 1,
     fontSize: 15,
+    fontWeight: '500',
     color: theme.colors.text,
   },
   footer: {

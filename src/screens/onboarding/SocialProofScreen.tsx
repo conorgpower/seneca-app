@@ -2,7 +2,10 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as StoreReview from 'expo-store-review';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import OnboardingProgressBar from '../../components/OnboardingProgressBar';
 import { getSupabaseImageSource } from '../../data/asset-cdn';
 
 interface SocialProofScreenProps {
@@ -28,6 +31,8 @@ const TESTIMONIALS = [
     role: 'Engineer',
   },
 ];
+
+const ratingImage = getSupabaseImageSource('images/app-store-rating_nobg.png');
 
 const userImages = {
   user1: getSupabaseImageSource('images/social-proof/user1.webp'),
@@ -70,6 +75,7 @@ export default function SocialProofScreen({ onComplete, overallProgress, onBack 
   };
 
   return (
+    <AppBackground topSafeZone={0}>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
@@ -80,25 +86,22 @@ export default function SocialProofScreen({ onComplete, overallProgress, onBack 
           )}
 
           {overallProgress !== undefined && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${overallProgress}%` }]} />
-              </View>
-            </View>
+            <OnboardingProgressBar progress={overallProgress} />
           )}
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.ratingContainer}>
-            <View style={styles.stars}>
-              {[1, 2, 3, 4, 5].map((star, index) => (
-                <Text key={star} style={styles.star}>
-                  {index < 4 ? '⭐' : '⭐'}
-                </Text>
-              ))}
-            </View>
-            <Text style={styles.rating}>4.8 average rating</Text>
-            <Text style={styles.users}>Many enlightened users</Text>
+            {ratingImage ? (
+              <Image source={ratingImage} style={styles.ratingImage} />
+            ) : (
+              <View style={styles.stars}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Text key={star} style={styles.star}>⭐</Text>
+                ))}
+              </View>
+            )}
+            <Text style={styles.users}>10,000+ enlightened users</Text>
 
             {/* User Images */}
             <View style={styles.userImagesContainer}>
@@ -140,18 +143,18 @@ export default function SocialProofScreen({ onComplete, overallProgress, onBack 
 
       {/* Continue Button */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.continueButton} onPress={onComplete}>
+        <TouchableOpacity style={styles.continueButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onComplete(); }}>
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -166,7 +169,13 @@ const styles = StyleSheet.create({
   },
   ratingContainer: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl * 2,
+    marginBottom: theme.spacing.lg,
+  },
+  ratingImage: {
+    width: '100%',
+    height: 120,
+    resizeMode: 'contain',
+    marginBottom: theme.spacing.sm,
   },
   stars: {
     flexDirection: 'row',
@@ -291,20 +300,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     textAlign: 'center',
     marginTop: theme.spacing.sm,
-  },
-  progressContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 2,
   },
   buttonContainer: {
     paddingHorizontal: theme.spacing.xl,

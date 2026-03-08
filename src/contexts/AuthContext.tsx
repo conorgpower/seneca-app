@@ -300,7 +300,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (metadata?.onboardingAnswers) {
         await UserProfileService.saveOnboardingAnswers(
           newUser.id,
-          metadata.onboardingAnswers
+          metadata.onboardingAnswers,
+          email
         );
       }
     }
@@ -336,8 +337,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const saveOnboardingAnswers = async (answers: Record<string, any>) => {
     if (!user) return;
-    
-    await UserProfileService.saveOnboardingAnswers(user.id, answers);
+
+    await UserProfileService.saveOnboardingAnswers(user.id, answers, user.email ?? undefined);
   };
 
   const value: AuthContextType = {

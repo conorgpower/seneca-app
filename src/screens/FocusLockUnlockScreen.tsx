@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
-  ImageBackground,
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ import { useFocusLock } from '../contexts/FocusLockContext';
 import { useToday } from '../contexts/TodayContext';
 import { getSupabaseImageSource } from '../data/asset-cdn';
 
-const WISDOM_BG_IMAGE = getSupabaseImageSource('images/background-quote-2.webp');
+const WISDOM_BG_IMAGE = getSupabaseImageSource('images/background-quote.webp');
 
 export default function FocusLockUnlockScreen() {
   const navigation = useNavigation<any>();
@@ -85,14 +85,15 @@ export default function FocusLockUnlockScreen() {
               {/* Quote Card — same style as Today screen */}
               <View style={styles.quoteCard}>
                 {WISDOM_BG_IMAGE ? (
-                  <ImageBackground
-                    source={WISDOM_BG_IMAGE}
-                    style={styles.quoteBackground}
-                    imageStyle={styles.quoteBackgroundImage}
-                    resizeMode="cover"
-                  >
+                  <View style={styles.quoteBackground}>
+                    <Image
+                      source={WISDOM_BG_IMAGE}
+                      style={styles.quoteImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.imageOverlay} />
                     {quoteContent}
-                  </ImageBackground>
+                  </View>
                 ) : (
                   <View style={[styles.quoteBackground, styles.quoteBackgroundFallback]}>
                     {quoteContent}
@@ -188,39 +189,58 @@ const styles = StyleSheet.create({
   },
   quoteBackground: {
     width: '100%',
-    minHeight: 150,
+    minHeight: 220,
+    justifyContent: 'center',
+  },
+  quoteImage: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    aspectRatio: 1,
+  },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
   quoteBackgroundFallback: {
     backgroundColor: '#4A90A4',
   },
-  quoteBackgroundImage: {
-    borderRadius: theme.borderRadius.lg,
-  },
   quoteOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    padding: theme.spacing.lg,
-    flex: 1,
-    justifyContent: 'center',
+    padding: theme.spacing.xl,
+    paddingVertical: 32,
+    justifyContent: 'flex-start',
   },
   quoteLabel: {
     fontSize: theme.typography.sizes.sm,
     color: '#FFFFFF',
     marginBottom: theme.spacing.md,
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    fontWeight: '600',
+    letterSpacing: 2,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   quoteText: {
     fontSize: theme.typography.sizes.lg,
+    fontWeight: '700',
     color: '#FFFFFF',
     fontStyle: 'italic',
-    marginBottom: theme.spacing.md,
-    lineHeight: 26,
+    marginBottom: theme.spacing.lg,
+    lineHeight: 28,
+    textAlign: 'left',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   quoteAuthor: {
     fontSize: theme.typography.sizes.md,
     fontWeight: '700',
     color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   unlockButton: {
     backgroundColor: theme.colors.primary,

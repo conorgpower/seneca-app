@@ -5,19 +5,24 @@ remove_gif_bg.py
 Removes the background from every animated GIF found inside assets/mascot/
 (searched recursively) and saves a new *_nobg.gif file next to each original.
 
-Two modes are available:
+Three modes are available:
 
   color  – (default) Detects the dominant background colour from frame corners
            and removes pixels within a configurable colour distance. This is
            deterministic, consistent across frames, and preserves non-background
            elements like thought bubbles.
 
+  exact  – Removes a specific colour from every frame. Defaults to white
+           (#FFFFFF). You can specify any colour with --remove-color. An
+           optional --exact-tolerance allows slight fuzziness (default 0 =
+           pixel-perfect match only).
+
   ai     – Uses rembg (AI-based, U2Net model) for segmentation. Better for
            photos / complex backgrounds but may incorrectly remove foreground
            elements and can be inconsistent between frames.
 
 Requirements (install once):
-    pip3 install Pillow numpy             # for color mode
+    pip3 install Pillow numpy             # for color / exact modes
     pip3 install "rembg[cpu]"             # additionally needed for ai mode
 
 Usage:
@@ -26,6 +31,15 @@ Usage:
 
     # Adjust colour tolerance (higher = more aggressive removal, default 40):
     python3 scripts/remove_gif_bg.py --color-tolerance 50 assets/mascot/thinking-animated.gif
+
+    # Exact mode – remove all pure white pixels:
+    python3 scripts/remove_gif_bg.py --mode exact assets/mascot/thinking-animated.gif
+
+    # Exact mode – remove a specific colour (hex):
+    python3 scripts/remove_gif_bg.py --mode exact --remove-color "#F5F0E1" assets/mascot/calendar-animated.gif
+
+    # Exact mode – with a small tolerance for near-matches:
+    python3 scripts/remove_gif_bg.py --mode exact --remove-color "#FFFFFF" --exact-tolerance 10 assets/mascot/thinking-animated.gif
 
     # Use AI mode:
     python3 scripts/remove_gif_bg.py --mode ai assets/mascot/thinking-animated.gif
@@ -234,6 +248,39 @@ def remove_bg_color(
     return Image.fromarray(rgba, "RGBA")
 
 
+# ── Exact colour removal ──────────────────────────────────────────────────────
+
+def parse_hex_color(hex_str: str) -> np.ndarray:
+    """Parse a hex colour string like '#FFFFFF' or 'FF0000' into an RGB array."""
+    hex_str = hex_str.lstrip("#")
+    if len(hex_str) != 6:
+        raise ValueError(f"Invalid hex colour: '#{hex_str}'. Expected 6 hex digits, e.g. '#FFFFFF'.")
+    r, g, b = int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
+    return np.array([r, g, b], dtype=np.uint8)
+
+
+def remove_bg_exact(
+    frame: Image.Image,
+    target_color: np.ndarray,
+    tolerance: int = 0,
+) -> Image.Image:
+    """
+    Remove all pixels matching `target_color` exactly (or within `tolerance`
+    Euclidean RGB distance) from the frame.  No flood-fill or edge detection —
+    every matching pixel in the frame is made transparent.
+    """
+    rgb_arr = np.array(frame.convert("RGB"), dtype=np.float64)
+    dist = np.sqrt(np.sum((rgb_arr - target_color.astype(np.float64)) ** 2, axis=2))
+
+    bg_mask = dist <= tolerance
+
+    alpha = np.where(bg_mask, 0, 255).astype(np.uint8)
+
+    rgba = np.array(frame.convert("RGBA"), dtype=np.uint8)
+    rgba[:, :, 3] = alpha
+    return Image.fromarray(rgba, "RGBA")
+
+
 # ── AI-based per-frame background removal ────────────────────────────────────
 
 def remove_bg_from_frame(frame: Image.Image, session, rembg_remove, threshold: int) -> Image.Image:
@@ -300,6 +347,8 @@ def process_gif(
     color_tolerance: int,
     remove_interior: bool,
     dry_run: bool,
+    exact_color: np.ndarray | None = None,
+    exact_tolerance: int = 0,
 ) -> None:
     out_path = gif_path.with_stem(gif_path.stem + "_nobg")
 
@@ -314,6 +363,9 @@ def process_gif(
 
     if mode == "color":
         print(f"    Tolerance: {color_tolerance}  |  Per-frame BG detection + interior peeling")
+    elif mode == "exact":
+        hex_str = "#{:02X}{:02X}{:02X}".format(*exact_color) if exact_color is not None else "N/A"
+        print(f"    Target colour: {hex_str}  |  Tolerance: {exact_tolerance}")
 
     gif_frames: list[tuple[Image.Image, int, int]] = []
 
@@ -322,6 +374,8 @@ def process_gif(
         if mode == "color":
             bg_color = detect_bg_color(frame_rgba)
             nobg = remove_bg_color(frame_rgba, bg_color, color_tolerance, remove_interior=remove_interior)
+        elif mode == "exact":
+            nobg = remove_bg_exact(frame_rgba, exact_color, tolerance=exact_tolerance)
         else:
             nobg = remove_bg_from_frame(frame_rgba, session, rembg_remove_fn, threshold)
         paletted, ti = rgba_to_gif_frame(nobg)
@@ -371,9 +425,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["color", "ai"],
+        choices=["color", "exact", "ai"],
         default="color",
-        help="Removal mode: 'color' (default) uses colour-distance matching; 'ai' uses rembg U2Net.",
+        help="Removal mode: 'color' (default) uses colour-distance matching; 'exact' removes a specific colour; 'ai' uses rembg U2Net.",
     )
     parser.add_argument(
         "--color-tolerance",
@@ -393,6 +447,26 @@ def main() -> None:
         help=(
             "(ai mode) Alpha cutoff for binarisation. Pixels with alpha ≥ threshold are kept opaque; "
             "below are transparent. Lower = preserve more edge detail. (default: 128)"
+        ),
+    )
+    parser.add_argument(
+        "--remove-color",
+        type=str,
+        default="#FFFFFF",
+        metavar="HEX",
+        help=(
+            "(exact mode) The colour to remove, as a hex string. "
+            "Examples: '#FFFFFF' (white), '#F5F0E1' (cream). (default: #FFFFFF)"
+        ),
+    )
+    parser.add_argument(
+        "--exact-tolerance",
+        type=int,
+        default=0,
+        metavar="0-255",
+        help=(
+            "(exact mode) Euclidean RGB distance threshold. 0 = pixel-perfect match only. "
+            "Small values (5-15) catch slight anti-aliasing around the target colour. (default: 0)"
         ),
     )
     parser.add_argument(
@@ -427,12 +501,17 @@ def main() -> None:
 
     session = None
     rembg_remove_fn = None
+    exact_color = None
 
     if not args.dry_run and args.mode == "ai":
         new_session, rembg_remove_fn = _load_rembg()
         print("Loading rembg model (downloads ~170 MB on first run, cached after that)…")
         session = new_session("u2net")
         print("Model ready.\n")
+    elif not args.dry_run and args.mode == "exact":
+        exact_color = parse_hex_color(args.remove_color)
+        hex_str = "#{:02X}{:02X}{:02X}".format(*exact_color)
+        print(f"Using exact colour removal (target={hex_str}, tolerance={args.exact_tolerance}).\n")
     elif not args.dry_run:
         print(f"Using color-based removal (tolerance={args.color_tolerance}).\n")
 
@@ -446,6 +525,8 @@ def main() -> None:
             color_tolerance=args.color_tolerance,
             remove_interior=not args.no_interior,
             dry_run=args.dry_run,
+            exact_color=exact_color,
+            exact_tolerance=args.exact_tolerance,
         )
 
     print("Done.")

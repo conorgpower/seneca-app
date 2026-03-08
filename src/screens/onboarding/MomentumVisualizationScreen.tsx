@@ -1,7 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FontAwesome6 } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../../theme';
+import { AppBackground } from '../../components/AppBackground';
+import OnboardingProgressBar from '../../components/OnboardingProgressBar';
 
 interface MomentumVisualizationScreenProps {
   onComplete: () => void;
@@ -10,10 +14,10 @@ interface MomentumVisualizationScreenProps {
 }
 
 const MILESTONES = [
-  { days: 3, title: 'Clarity spark', emoji: '✨', description: 'First moments of calm' },
-  { days: 7, title: 'Emotional control', emoji: '🎯', description: 'Respond, not react' },
-  { days: 30, title: 'Habit formation', emoji: '📈', description: 'Practice becomes natural' },
-  { days: 90, title: 'Identity shift', emoji: '👑', description: 'You become who you practice' },
+  { days: 3, title: 'Clarity spark', icon: 'bolt', description: 'First moments of calm' },
+  { days: 7, title: 'Emotional control', icon: 'bullseye', description: 'Respond, not react' },
+  { days: 30, title: 'Habit formation', icon: 'arrow-trend-up', description: 'Practice becomes natural' },
+  { days: 90, title: 'Identity shift', icon: 'crown', description: 'You become who you practice' },
 ];
 
 export default function MomentumVisualizationScreen({
@@ -40,6 +44,7 @@ export default function MomentumVisualizationScreen({
   }, []);
 
   return (
+    <AppBackground topSafeZone={0}>
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.header}>
@@ -49,11 +54,7 @@ export default function MomentumVisualizationScreen({
             </TouchableOpacity>
           )}
           {overallProgress !== undefined && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${overallProgress}%` }]} />
-              </View>
-            </View>
+            <OnboardingProgressBar progress={overallProgress} />
           )}
         </View>
 
@@ -95,7 +96,9 @@ export default function MomentumVisualizationScreen({
 
                     <View style={styles.milestoneContent}>
                       <View style={styles.milestoneHeader}>
-                        <Text style={styles.emoji}>{milestone.emoji}</Text>
+                        <View style={styles.iconContainer}>
+                          <FontAwesome6 name={milestone.icon} size={16} color={theme.colors.primary} />
+                        </View>
                         <View style={styles.milestoneTextContainer}>
                           <Text style={styles.milestoneDays}>{milestone.days} days</Text>
                           <Text style={styles.milestoneTitle}>{milestone.title}</Text>
@@ -119,18 +122,18 @@ export default function MomentumVisualizationScreen({
 
       {/* Continue Button */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.continueButton} onPress={onComplete}>
+        <TouchableOpacity style={styles.continueButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onComplete(); }}>
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
+    </AppBackground>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   container: {
     flex: 1,
@@ -198,6 +201,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 4,
     elevation: 3,
+    marginTop: 10,
   },
   line: {
     width: 2,
@@ -215,8 +219,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.xs,
   },
-  emoji: {
-    fontSize: 24,
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.backgroundCard,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: theme.spacing.sm,
   },
   milestoneTextContainer: {
@@ -236,7 +245,7 @@ const styles = StyleSheet.create({
   milestoneDescription: {
     fontSize: 14,
     color: theme.colors.textSecondary,
-    marginLeft: 32,
+    marginLeft: 44,
     lineHeight: 20,
   },
   footer: {
@@ -248,20 +257,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
     fontStyle: 'italic',
-  },
-  progressContainer: {
-    marginBottom: theme.spacing.lg,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: theme.colors.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 2,
   },
   buttonContainer: {
     paddingHorizontal: theme.spacing.xl,

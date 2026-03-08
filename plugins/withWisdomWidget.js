@@ -13,6 +13,8 @@ const WIDGET_DIR = 'WisdomWidgetModule';
 const WIDGET_PRODUCT_BUNDLE_SUFFIX = 'WisdomWidgetModule';
 
 const APP_BRIDGE_SWIFT = `import Foundation
+import React
+import UIKit
 import WidgetKit
 
 @objc(WisdomWidgetModule)
@@ -43,7 +45,9 @@ class WisdomWidgetModule: NSObject {
     defaults.set(lockAuthor, forKey: "author_lock")
     defaults.set(largeQuoteText, forKey: "quote_text")
     defaults.set(largeAuthor, forKey: "author")
+    defaults.set(Date().timeIntervalSince1970, forKey: "widget_revision")
     defaults.set(Date(), forKey: "updated_at")
+    defaults.synchronize()
 
     if #available(iOS 14.0, *) {
       WidgetCenter.shared.reloadAllTimelines()
@@ -63,88 +67,117 @@ class WisdomWidgetModule: NSObject {
 
   @objc func setWidgetBackgroundImages(
     _ smallImageUrl: String,
-    largeImageUrl: String
+    largeImageUrl: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
     NSLog("[WidgetBG-Native] setWidgetBackgroundImages called")
-    NSLog("[WidgetBG-Native] smallUrl: %@", smallImageUrl)
-    NSLog("[WidgetBG-Native] largeUrl: %@", largeImageUrl)
 
     guard let containerUrl = FileManager.default.containerURL(
       forSecurityApplicationGroupIdentifier: suiteName
     ) else {
       NSLog("[WidgetBG-Native] ERROR: Could not get App Group container URL")
+      reject("APP_GROUP_ERROR", "Could not get App Group container URL", nil)
       return
     }
-
-    NSLog("[WidgetBG-Native] Container path: %@", containerUrl.path)
 
     let smallDest = containerUrl.appendingPathComponent("widget_bg_small.png")
     let largeDest = containerUrl.appendingPathComponent("widget_bg_large.png")
 
     DispatchQueue.global(qos: .utility).async {
-      self.downloadImage(from: smallImageUrl, to: smallDest)
-      self.downloadImage(from: largeImageUrl, to: largeDest)
-
-      let smallExists = FileManager.default.fileExists(atPath: smallDest.path)
-      let largeExists = FileManager.default.fileExists(atPath: largeDest.path)
-      NSLog("[WidgetBG-Native] After download - small exists: %d, large exists: %d", smallExists, largeExists)
+      let smallOk = self.downloadAndConvertImage(from: smallImageUrl, to: smallDest)
+      let largeOk = self.downloadAndConvertImage(from: largeImageUrl, to: largeDest)
+      NSLog("[WidgetBG-Native] Results - small: %d, large: %d", smallOk, largeOk)
 
       let defaults = UserDefaults(suiteName: self.suiteName)
-      defaults?.set(true, forKey: "widget_bg_images_available")
+      defaults?.set(smallOk && largeOk, forKey: "widget_bg_images_available")
+      defaults?.set(Date().timeIntervalSince1970, forKey: "widget_revision")
       defaults?.set(Date(), forKey: "widget_bg_updated_at")
+      defaults?.synchronize()
 
       if #available(iOS 14.0, *) {
         WidgetCenter.shared.reloadAllTimelines()
         NSLog("[WidgetBG-Native] Reloaded all timelines")
       }
+
+      resolve([
+        "smallOk": smallOk,
+        "largeOk": largeOk,
+        "containerPath": containerUrl.path
+      ])
     }
   }
 
-  private func downloadImage(from urlString: String, to destination: URL) {
+  private func downloadAndConvertImage(from urlString: String, to destination: URL) -> Bool {
     guard let url = URL(string: urlString) else {
       NSLog("[WidgetBG-Native] ERROR: Invalid URL: %@", urlString)
-      return
+      return false
+    }
+
+    if url.isFileURL {
+      do {
+        let data = try Data(contentsOf: url)
+        guard let uiImage = UIImage(data: data) else {
+          NSLog("[WidgetBG-Native] ERROR: Could not decode local image at %@", urlString)
+          return false
+        }
+        guard let pngData = uiImage.pngData() else {
+          NSLog("[WidgetBG-Native] ERROR: Could not convert local image to PNG at %@", urlString)
+          return false
+        }
+        try pngData.write(to: destination, options: .atomic)
+        NSLog("[WidgetBG-Native] Wrote %d bytes PNG to %@ from local file", pngData.count, destination.lastPathComponent)
+        return true
+      } catch {
+        NSLog("[WidgetBG-Native] ERROR reading local file %@: %@", urlString, error.localizedDescription)
+        return false
+      }
     }
 
     let semaphore = DispatchSemaphore(value: 0)
-    var downloadError: Error?
+    var success = false
 
     let task = URLSession.shared.dataTask(with: url) { data, response, error in
       defer { semaphore.signal() }
 
       if let error = error {
         NSLog("[WidgetBG-Native] ERROR network: %@", error.localizedDescription)
-        downloadError = error
         return
       }
 
-      if let httpResponse = response as? HTTPURLResponse {
-        NSLog("[WidgetBG-Native] HTTP status: %d for %@", httpResponse.statusCode, urlString)
-        if httpResponse.statusCode != 200 {
-          NSLog("[WidgetBG-Native] ERROR: Non-200 status code")
-          return
-        }
+      if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+        NSLog("[WidgetBG-Native] ERROR: HTTP %d for %@", httpResponse.statusCode, urlString)
+        return
       }
 
       guard let data = data, !data.isEmpty else {
-        NSLog("[WidgetBG-Native] ERROR: No data received from %@", urlString)
+        NSLog("[WidgetBG-Native] ERROR: No data from %@", urlString)
         return
       }
 
       NSLog("[WidgetBG-Native] Downloaded %d bytes from %@", data.count, urlString)
+
+      guard let uiImage = UIImage(data: data) else {
+        NSLog("[WidgetBG-Native] ERROR: Could not decode image data from %@", urlString)
+        return
+      }
+
+      guard let pngData = uiImage.pngData() else {
+        NSLog("[WidgetBG-Native] ERROR: Could not convert to PNG from %@", urlString)
+        return
+      }
+
       do {
-        try data.write(to: destination, options: .atomic)
-        NSLog("[WidgetBG-Native] Wrote to %@", destination.path)
+        try pngData.write(to: destination, options: .atomic)
+        NSLog("[WidgetBG-Native] Wrote %d bytes PNG to %@", pngData.count, destination.lastPathComponent)
+        success = true
       } catch {
-        NSLog("[WidgetBG-Native] ERROR writing file: %@", error.localizedDescription)
+        NSLog("[WidgetBG-Native] ERROR writing: %@", error.localizedDescription)
       }
     }
     task.resume()
     semaphore.wait()
-
-    if let err = downloadError {
-      NSLog("[WidgetBG-Native] Download failed for %@: %@", urlString, err.localizedDescription)
-    }
+    return success
   }
 }
 `;
@@ -163,7 +196,9 @@ RCT_EXTERN_METHOD(setWidgetQuotes:(NSString *)smallQuoteText
 RCT_EXTERN_METHOD(setDailyQuote:(NSString *)quoteText author:(NSString *)author)
 
 RCT_EXTERN_METHOD(setWidgetBackgroundImages:(NSString *)smallImageUrl
-                  largeImageUrl:(NSString *)largeImageUrl)
+                  largeImageUrl:(NSString *)largeImageUrl
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 
 + (BOOL)requiresMainQueueSetup
 {
@@ -228,47 +263,78 @@ struct WisdomWidgetModuleBundle: WidgetBundle {
 `;
 
 const WIDGET_SWIFT = `import SwiftUI
+import UIKit
 import WidgetKit
 
 private let appGroupSuite = "${APP_GROUP_ID}"
 
 struct WisdomEntry: TimelineEntry {
   let date: Date
+  let revision: Double
   let smallQuote: String
   let smallAuthor: String
   let largeQuote: String
   let largeAuthor: String
   let lockQuote: String
   let lockAuthor: String
+  let smallImage: UIImage?
+  let largeImage: UIImage?
 }
 
 struct WisdomProvider: TimelineProvider {
   func placeholder(in context: Context) -> WisdomEntry {
     WisdomEntry(
       date: Date(),
+      revision: 0,
       smallQuote: "Waste no more time arguing about what a good man should be. Be one.",
       smallAuthor: "Marcus Aurelius",
       largeQuote: "Waste no more time arguing about what a good man should be. Be one.",
       largeAuthor: "Marcus Aurelius",
       lockQuote: "Waste no more time arguing about what a good man should be. Be one.",
-      lockAuthor: "Marcus Aurelius"
+      lockAuthor: "Marcus Aurelius",
+      smallImage: nil,
+      largeImage: nil
     )
   }
 
   func getSnapshot(in context: Context, completion: @escaping (WisdomEntry) -> Void) {
-    completion(loadEntryFromSharedDefaults())
+    NSLog("[WidgetExt] getSnapshot called")
+    completion(loadEntry())
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<WisdomEntry>) -> Void) {
-    let entry = loadEntryFromSharedDefaults()
+    NSLog("[WidgetExt] getTimeline called")
+    let entry = loadEntry()
     let nextRefresh = Date().addingTimeInterval(60 * 30)
     completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
   }
 
-  private func loadEntryFromSharedDefaults() -> WisdomEntry {
+  private func loadWidgetImage(named filename: String) -> UIImage? {
+    guard let containerUrl = FileManager.default.containerURL(
+      forSecurityApplicationGroupIdentifier: appGroupSuite
+    ) else {
+      NSLog("[WidgetExt] ERROR: App Group container nil for %@", appGroupSuite)
+      return nil
+    }
+    let filePath = containerUrl.appendingPathComponent(filename).path
+    let exists = FileManager.default.fileExists(atPath: filePath)
+    NSLog("[WidgetExt] Image %@ exists: %@", filename, exists ? "YES" : "NO")
+    guard exists else { return nil }
+    let image = UIImage(contentsOfFile: filePath)
+    NSLog("[WidgetExt] Image %@ loaded: %@", filename, image != nil ? "YES" : "NO")
+    return image
+  }
+
+  private func loadEntry() -> WisdomEntry {
     let defaults = UserDefaults(suiteName: appGroupSuite)
+    defaults?.synchronize()
     let fallbackQuote = "Waste no more time arguing about what a good man should be. Be one."
     let fallbackAuthor = "Marcus Aurelius"
+    let revision = defaults?.double(forKey: "widget_revision") ?? 0
+
+    let hasDefaults = defaults != nil
+    let hasQuote = defaults?.string(forKey: "quote_text_small") != nil
+    NSLog("[WidgetExt] loadEntry - defaults: %@, hasQuote: %@", hasDefaults ? "YES" : "NO", hasQuote ? "YES" : "NO")
 
     let smallQuote = defaults?.string(forKey: "quote_text_small") ?? defaults?.string(forKey: "quote_text") ?? fallbackQuote
     let smallAuthor = defaults?.string(forKey: "author_small") ?? defaults?.string(forKey: "author") ?? fallbackAuthor
@@ -277,14 +343,21 @@ struct WisdomProvider: TimelineProvider {
     let lockQuote = defaults?.string(forKey: "quote_text_lock") ?? defaults?.string(forKey: "quote_text") ?? fallbackQuote
     let lockAuthor = defaults?.string(forKey: "author_lock") ?? defaults?.string(forKey: "author") ?? fallbackAuthor
 
+    let smallImg = loadWidgetImage(named: "widget_bg_small.png")
+    let largeImg = loadWidgetImage(named: "widget_bg_large.png")
+    NSLog("[WidgetExt] loadEntry complete - quote: %.30@..., smallImg: %@, largeImg: %@", smallQuote, smallImg != nil ? "YES" : "NO", largeImg != nil ? "YES" : "NO")
+
     return WisdomEntry(
       date: Date(),
+      revision: revision,
       smallQuote: smallQuote,
       smallAuthor: smallAuthor,
       largeQuote: largeQuote,
       largeAuthor: largeAuthor,
       lockQuote: lockQuote,
-      lockAuthor: lockAuthor
+      lockAuthor: lockAuthor,
+      smallImage: smallImg,
+      largeImage: largeImg
     )
   }
 }
@@ -331,33 +404,16 @@ struct WisdomWidgetModuleEntryView: View {
   }
 
   private var gradientFallback: some View {
-    LinearGradient(
-      colors: [Color(red: 0.20, green: 0.20, blue: 0.22), Color(red: 0.06, green: 0.06, blue: 0.08)],
-      startPoint: .topLeading,
-      endPoint: .bottomTrailing
-    )
-  }
-
-  private func loadWidgetImage(named filename: String) -> UIImage? {
-    guard let containerUrl = FileManager.default.containerURL(
-      forSecurityApplicationGroupIdentifier: appGroupSuite
-    ) else {
-      NSLog("[WidgetBG-Ext] ERROR: Could not get App Group container")
-      return nil
-    }
-    let fileUrl = containerUrl.appendingPathComponent(filename)
-    let exists = FileManager.default.fileExists(atPath: fileUrl.path)
-    NSLog("[WidgetBG-Ext] Loading %@ - exists: %d, path: %@", filename, exists, fileUrl.path)
-    guard exists else { return nil }
-    let image = UIImage(contentsOfFile: fileUrl.path)
-    NSLog("[WidgetBG-Ext] UIImage loaded: %d, size: %@", image != nil, image != nil ? "\\(image!.size)" : "nil")
-    return image
+    let isSmall = family == .systemSmall
+    let top = isSmall ? Color(red: 0.19, green: 0.21, blue: 0.30) : Color(red: 0.11, green: 0.16, blue: 0.30)
+    let bottom = isSmall ? Color(red: 0.06, green: 0.08, blue: 0.14) : Color(red: 0.04, green: 0.06, blue: 0.12)
+    return LinearGradient(colors: [top, bottom], startPoint: .topLeading, endPoint: .bottomTrailing)
   }
 
   @ViewBuilder
   private var homeWidgetBackground: some View {
-    let imageName = family == .systemSmall ? "widget_bg_small.png" : "widget_bg_large.png"
-    if let uiImage = loadWidgetImage(named: imageName) {
+    let bgImage = family == .systemSmall ? entry.smallImage : entry.largeImage
+    if let uiImage = bgImage {
       Image(uiImage: uiImage)
         .resizable()
         .aspectRatio(contentMode: .fill)
@@ -497,6 +553,7 @@ struct WisdomWidgetModuleEntryView: View {
           .widgetURL(todayURL)
       }
     }
+    .id(entry.revision)
   }
 }
 
@@ -782,12 +839,135 @@ function withWisdomWidget(config) {
         appTargetKey,
         mainGroupKey
       );
+
+      // Ensure widget extension builds before the app and is embedded
+      addWidgetDependency(project, appTargetKey, widgetTargetKey, WIDGET_TARGET_NAME);
+      addEmbedWidgetPhase(project, appTargetKey, widgetTargetKey, WIDGET_TARGET_NAME);
     }
 
     return config;
   });
 
   return config;
+}
+
+// ============================================================================
+// Add a target dependency so Xcode builds the widget before the app
+// ============================================================================
+
+function addWidgetDependency(project, appTargetKey, widgetTargetKey, widgetTargetName) {
+  const appTarget = project.pbxNativeTargetSection()[appTargetKey];
+  if (!appTarget) return;
+
+  if (!appTarget.dependencies) {
+    appTarget.dependencies = [];
+  }
+  const hasDependency = appTarget.dependencies.some((dep) => {
+    const depObj = project.hash.project.objects.PBXTargetDependency?.[dep.value];
+    return depObj && depObj.target === widgetTargetKey;
+  });
+  if (hasDependency) return;
+
+  const depUuid = project.generateUuid();
+  const proxyUuid = project.generateUuid();
+  const rootProjectUuid = project.getFirstProject().uuid;
+
+  if (!project.hash.project.objects.PBXContainerItemProxy) {
+    project.hash.project.objects.PBXContainerItemProxy = {};
+  }
+  project.hash.project.objects.PBXContainerItemProxy[proxyUuid] = {
+    isa: 'PBXContainerItemProxy',
+    containerPortal: rootProjectUuid,
+    proxyType: 1,
+    remoteGlobalIDString: widgetTargetKey,
+    remoteInfo: `"${widgetTargetName}"`,
+  };
+  project.hash.project.objects.PBXContainerItemProxy[`${proxyUuid}_comment`] = 'PBXContainerItemProxy';
+
+  if (!project.hash.project.objects.PBXTargetDependency) {
+    project.hash.project.objects.PBXTargetDependency = {};
+  }
+  project.hash.project.objects.PBXTargetDependency[depUuid] = {
+    isa: 'PBXTargetDependency',
+    target: widgetTargetKey,
+    targetProxy: proxyUuid,
+  };
+  project.hash.project.objects.PBXTargetDependency[`${depUuid}_comment`] = 'PBXTargetDependency';
+
+  appTarget.dependencies.push({ value: depUuid, comment: 'PBXTargetDependency' });
+}
+
+// ============================================================================
+// Add a "Embed Foundation Extensions" copy files phase to embed the widget
+// ============================================================================
+
+function addEmbedWidgetPhase(project, appTargetKey, widgetTargetKey, widgetTargetName) {
+  const appTarget = project.pbxNativeTargetSection()[appTargetKey];
+  if (!appTarget || !appTarget.buildPhases) return;
+
+  if (!project.hash.project.objects.PBXCopyFilesBuildPhase) {
+    project.hash.project.objects.PBXCopyFilesBuildPhase = {};
+  }
+  const copyPhases = project.hash.project.objects.PBXCopyFilesBuildPhase;
+  const appexName = `${widgetTargetName}.appex`;
+
+  // Check if already embedded in any existing copy files phase (dstSubfolderSpec 13 = PlugIns)
+  for (const bp of appTarget.buildPhases) {
+    const phase = copyPhases[bp.value];
+    if (phase && String(phase.dstSubfolderSpec) === '13') {
+      const alreadyEmbedded = phase.files?.some((f) => {
+        const bf = project.pbxBuildFileSection()[f.value];
+        return bf && (bf.fileRef_comment === appexName || f.comment?.includes(appexName));
+      });
+      if (alreadyEmbedded) return;
+    }
+  }
+
+  // Find or create the embed extensions phase
+  let embedPhaseUuid = null;
+  for (const bp of appTarget.buildPhases) {
+    const phase = copyPhases[bp.value];
+    if (phase && String(phase.dstSubfolderSpec) === '13') {
+      embedPhaseUuid = bp.value;
+      break;
+    }
+  }
+
+  if (!embedPhaseUuid) {
+    embedPhaseUuid = project.generateUuid();
+    copyPhases[embedPhaseUuid] = {
+      isa: 'PBXCopyFilesBuildPhase',
+      buildActionMask: 2147483647,
+      dstPath: '""',
+      dstSubfolderSpec: 13,
+      files: [],
+      name: '"Embed Foundation Extensions"',
+      runOnlyForDeploymentPostprocessing: 0,
+    };
+    copyPhases[`${embedPhaseUuid}_comment`] = 'Embed Foundation Extensions';
+    appTarget.buildPhases.push({ value: embedPhaseUuid, comment: 'Embed Foundation Extensions' });
+  }
+
+  const embedPhase = copyPhases[embedPhaseUuid];
+
+  // Find the product reference for the widget extension target
+  const widgetTarget = project.pbxNativeTargetSection()[widgetTargetKey];
+  if (!widgetTarget || !widgetTarget.productReference) return;
+
+  const buildFileUuid = project.generateUuid();
+  const buildFileSection = project.pbxBuildFileSection();
+  buildFileSection[buildFileUuid] = {
+    isa: 'PBXBuildFile',
+    fileRef: widgetTarget.productReference,
+    fileRef_comment: appexName,
+    settings: { ATTRIBUTES: ['RemoveHeadersOnCopy'] },
+  };
+  buildFileSection[`${buildFileUuid}_comment`] = `${appexName} in Embed Foundation Extensions`;
+
+  embedPhase.files.push({
+    value: buildFileUuid,
+    comment: `${appexName} in Embed Foundation Extensions`,
+  });
 }
 
 module.exports = withWisdomWidget;

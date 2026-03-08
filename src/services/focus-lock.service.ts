@@ -6,6 +6,7 @@ interface FocusLockNativeModule {
   presentAppPicker(): Promise<{ appCount: number } | null>;
   lockApps(): Promise<boolean>;
   unlockApps(): Promise<boolean>;
+  relockIfNewDay(): Promise<boolean>;
   getLockStatus(): Promise<{
     isEnabled: boolean;
     appCount: number;
@@ -85,6 +86,16 @@ export async function getLockStatus(): Promise<{
   } catch (error) {
     console.error('[FocusLock] Get status error:', error);
     return { isEnabled: false, appCount: 0, unlockedDate: null };
+  }
+}
+
+export async function relockIfNewDay(): Promise<boolean> {
+  if (!isSupported) return false;
+  try {
+    return await FocusLockModule!.relockIfNewDay();
+  } catch (error) {
+    console.error('[FocusLock] Relock error:', error);
+    return false;
   }
 }
 

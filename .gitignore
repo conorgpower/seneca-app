@@ -40,7 +40,9 @@ credentials.json
 
 # downloaded Supabase assets (local mirror)
 assets/audio/
-assets/images/
+assets/images/*
+!assets/images/widget-small.png
+!assets/images/widget-large.png
 assets/mascot/
 
 # generated native folders

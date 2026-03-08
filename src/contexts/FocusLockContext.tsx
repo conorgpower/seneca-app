@@ -38,6 +38,12 @@ export function FocusLockProvider({ children }: { children: React.ReactNode }) {
   const refreshStatus = useCallback(async () => {
     if (!isSupported) return;
 
+    // Auto re-lock if it's a new day since the last unlock
+    const relocked = await FocusLockService.relockIfNewDay();
+    if (relocked) {
+      console.log('[FocusLock] refreshStatus — auto re-locked for new day');
+    }
+
     const [authStatus, lockStatus, names] = await Promise.all([
       FocusLockService.getAuthorizationStatus(),
       FocusLockService.getLockStatus(),
@@ -100,22 +106,32 @@ export function FocusLockProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const openAppPicker = useCallback(async () => {
+    console.log('[FocusLock] openAppPicker — presenting picker...');
     const result = await FocusLockService.presentAppPicker();
-    console.log('[FocusLock] openAppPicker result:', JSON.stringify(result));
+    console.log('[FocusLock] openAppPicker — picker result:', JSON.stringify(result));
     if (result) {
+      console.log('[FocusLock] openAppPicker — appCount from picker:', result.appCount);
       setAppCount(result.appCount);
-      // Native side auto-locks on selection — update locked state
+      // Native side auto-locks on selection — update locked state to match
       if (result.appCount > 0) {
+        console.log('[FocusLock] openAppPicker — setting isLocked=true (native auto-locked)');
         setIsLocked(true);
         setUnlockedToday(false);
       } else {
+        console.log('[FocusLock] openAppPicker — no apps selected, setting isLocked=false');
         setIsLocked(false);
       }
       const names = await FocusLockService.getSelectedAppNames();
-      console.log('[FocusLock] openAppPicker — appCount:', result.appCount, 'names:', names);
+      console.log('[FocusLock] openAppPicker — app names:', names);
       setAppNames(names);
+      // Refresh full status from native to ensure sync
+      console.log('[FocusLock] openAppPicker — refreshing full status...');
+      await refreshStatus();
+      console.log('[FocusLock] openAppPicker — refresh complete');
+    } else {
+      console.log('[FocusLock] openAppPicker — picker was cancelled (result is null)');
     }
-  }, []);
+  }, [refreshStatus]);
 
   const lockAppsHandler = useCallback(async () => {
     const success = await FocusLockService.lockApps();
