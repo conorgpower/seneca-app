@@ -6,8 +6,15 @@
   "build": {
     "production": {
       "autoIncrement": true,
-      "credentialsSource": "local",
+      "credentialsSource": "remote",
       "environment": "production"
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6759259297"
+      }
     }
   }
 }
