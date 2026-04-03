@@ -24,7 +24,6 @@ import NotificationPermissionScreen from '../screens/onboarding/NotificationPerm
 import {
   scheduleOnboardingComebackReminder,
   cancelOnboardingComebackReminder,
-  scheduleTrialNudgeReminder,
 } from '../services/notifications.service';
 
 const Stack = createNativeStackNavigator();
@@ -325,10 +324,6 @@ export default function AuthNavigator() {
         console.error('Failed to cancel onboarding comeback reminder:', err);
       });
 
-      scheduleTrialNudgeReminder().catch((err) => {
-        console.error('Failed to schedule trial nudge reminder:', err);
-      });
-
       // User is now logged in, proceed to paywall
       setCurrentFlow('paywall');
     } catch (error: any) {
@@ -369,10 +364,6 @@ export default function AuthNavigator() {
       });
 
       if (completedOnboarding) {
-        scheduleTrialNudgeReminder().catch((err) => {
-          console.error('Failed to schedule trial nudge reminder:', err);
-        });
-
         setCurrentFlow('paywall');
       } else {
         setCurrentFlow('questions-1');

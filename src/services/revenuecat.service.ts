@@ -10,12 +10,10 @@ import {
   trackStartTrialEvent,
   trackSubscribeEvent,
 } from './appsflyer.service';
-import { cancelTrialNudgeReminder } from './notifications.service';
 import {
   trackMixpanelStartTrialEvent,
   trackMixpanelSubscribeEvent,
 } from './mixpanel.service';
-import { scheduleTrialEndingReminder } from './notifications.service';
 
 const API_KEY = Constants.expoConfig?.extra?.revenuecatApiKey || '';
 // RevenueCat "entitlement identifier" (not display name). Configure via env if it differs per project.
@@ -137,10 +135,6 @@ export async function purchasePackage(
 ): Promise<{ customerInfo: CustomerInfo; productIdentifier: string }> {
   const { customerInfo, productIdentifier } = await Purchases.purchasePackage(pkg);
 
-  cancelTrialNudgeReminder().catch((err) => {
-    console.error('Failed to cancel trial nudge reminder:', err);
-  });
-
   const currency = pkg.product.currencyCode || 'USD';
   const subscriptionId = productIdentifier || pkg.product.identifier;
   const introPriceValue = Number((pkg.product.introPrice as any)?.price ?? 0);
@@ -160,18 +154,6 @@ export async function purchasePackage(
   const isTrialPeriod = periodType === 'trial';
 
   if (isTrialPeriod) {
-    const isYearlyPlan = subscriptionId.includes('yearly');
-    if (isYearlyPlan) {
-      const expirationDateRaw = (matchingEntitlement as any)?.expirationDate;
-      const trialEndsAt = expirationDateRaw
-        ? new Date(expirationDateRaw)
-        : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-
-      scheduleTrialEndingReminder(trialEndsAt, 24).catch((error) => {
-        console.error('Failed to schedule trial-ending reminder notification:', error);
-      });
-    }
-
     trackStartTrialEvent({
       price: Number.isFinite(introPriceValue) ? introPriceValue : 0,
       currency,

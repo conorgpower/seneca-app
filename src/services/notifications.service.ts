@@ -15,9 +15,7 @@ Notifications.setNotificationHandler({
 
 const NOTIFICATION_CHANNEL_ID = 'daily-reminder';
 const NOTIFICATION_TAG = 'seneca-daily-reminder';
-const TRIAL_ENDING_NOTIFICATION_TAG = 'seneca-trial-ending-reminder';
 const ONBOARDING_COMEBACK_TAG = 'seneca-onboarding-comeback';
-const TRIAL_NUDGE_TAG = 'seneca-trial-nudge';
 
 /**
  * Read current OS-level notification permission status without prompting.
@@ -122,55 +120,6 @@ export async function cancelAllReminders(): Promise<void> {
 }
 
 /**
- * Cancel all scheduled Seneca trial-ending reminders.
- */
-export async function cancelTrialEndingReminders(): Promise<void> {
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  const trialReminders = scheduled.filter(
-    (n) => n.content.data?.type === TRIAL_ENDING_NOTIFICATION_TAG
-  );
-  for (const notification of trialReminders) {
-    await Notifications.cancelScheduledNotificationAsync(notification.identifier);
-  }
-}
-
-/**
- * Schedule a one-time local notification shortly before a trial ends.
- * Returns true if scheduled, false if skipped (no permission/invalid timing).
- */
-export async function scheduleTrialEndingReminder(
-  trialEndsAt: Date,
-  leadTimeHours: number = 24
-): Promise<boolean> {
-  if (!Device.isDevice) return false;
-
-  const hasPermission = await hasNotificationPermission();
-  if (!hasPermission) return false;
-
-  const reminderAt = new Date(trialEndsAt.getTime() - leadTimeHours * 60 * 60 * 1000);
-  if (!Number.isFinite(reminderAt.getTime()) || reminderAt.getTime() <= Date.now()) {
-    return false;
-  }
-
-  await cancelTrialEndingReminders();
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Trial ending soon',
-      body: 'Your Seneca free trial ends tomorrow. Cancel anytime before billing starts.',
-      sound: true,
-      data: { type: TRIAL_ENDING_NOTIFICATION_TAG },
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: reminderAt,
-    },
-  });
-
-  return true;
-}
-
-/**
  * Schedule a one-time notification ~24 hours from now reminding the user
  * to come back and finish onboarding.
  */
@@ -206,46 +155,6 @@ export async function cancelOnboardingComebackReminder(): Promise<void> {
     (n) => n.content.data?.type === ONBOARDING_COMEBACK_TAG
   );
   for (const notification of comebackReminders) {
-    await Notifications.cancelScheduledNotificationAsync(notification.identifier);
-  }
-}
-
-/**
- * Schedule a one-time notification ~48 hours from now nudging the user
- * to start their free trial.
- */
-export async function scheduleTrialNudgeReminder(): Promise<boolean> {
-  if (!Device.isDevice) return false;
-
-  const hasPermission = await hasNotificationPermission();
-  if (!hasPermission) return false;
-
-  await cancelTrialNudgeReminder();
-
-  const triggerDate = new Date(Date.now() + 48 * 60 * 60 * 1000);
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Your free trial is waiting',
-      body: 'Start your 3-day free trial and unlock the full Seneca experience. Cancel anytime.',
-      sound: true,
-      data: { type: TRIAL_NUDGE_TAG },
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: triggerDate,
-    },
-  });
-
-  return true;
-}
-
-export async function cancelTrialNudgeReminder(): Promise<void> {
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  const nudgeReminders = scheduled.filter(
-    (n) => n.content.data?.type === TRIAL_NUDGE_TAG
-  );
-  for (const notification of nudgeReminders) {
     await Notifications.cancelScheduledNotificationAsync(notification.identifier);
   }
 }

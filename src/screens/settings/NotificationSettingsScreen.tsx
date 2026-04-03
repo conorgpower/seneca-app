@@ -17,7 +17,6 @@ import {
   BellIcon,
   CalendarDaysIcon,
   FireIcon,
-  UserGroupIcon,
   ClockIcon,
 } from 'react-native-heroicons/solid';
 import SettingsRow, { SectionHeader } from '../../components/SettingsRow';
@@ -38,16 +37,14 @@ interface NotificationPrefs {
   pushEnabled: boolean;
   dailyReminder: boolean;
   streakReminder: boolean;
-  communityUpdates: boolean;
   reminderHour: number;
   reminderMinute: number;
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
-  pushEnabled: true,
-  dailyReminder: true,
-  streakReminder: true,
-  communityUpdates: false,
+  pushEnabled: false,
+  dailyReminder: false,
+  streakReminder: false,
   reminderHour: 9,
   reminderMinute: 0,
 };
@@ -274,14 +271,6 @@ export default function NotificationSettingsScreen() {
           icon={<FireIcon size={20} color={theme.colors.tertiary} />}
           value={prefs.streakReminder}
           onValueChange={(v) => savePrefs({ ...prefs, streakReminder: v })}
-          disabled={!prefs.pushEnabled}
-        />
-        <SettingsRow
-          type="toggle"
-          label="Community Updates"
-          icon={<UserGroupIcon size={20} color={theme.colors.tertiary} />}
-          value={prefs.communityUpdates}
-          onValueChange={(v) => savePrefs({ ...prefs, communityUpdates: v })}
           disabled={!prefs.pushEnabled}
           isLast
         />

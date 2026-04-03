@@ -82,7 +82,6 @@ export async function syncNotificationPrefs(
     pushEnabled: boolean;
     dailyReminder: boolean;
     streakReminder: boolean;
-    communityUpdates: boolean;
     reminderHour: number;
     reminderMinute: number;
   }
@@ -98,7 +97,7 @@ export async function syncNotificationPrefs(
           push_enabled: prefs.pushEnabled,
           daily_reminder: prefs.dailyReminder,
           streak_reminder: prefs.streakReminder,
-          community_updates: prefs.communityUpdates,
+          community_updates: false,
           reminder_hour: prefs.reminderHour,
           reminder_minute: prefs.reminderMinute,
           timezone,

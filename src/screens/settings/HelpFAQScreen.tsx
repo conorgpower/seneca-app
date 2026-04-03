@@ -53,7 +53,7 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     question: 'How do I change my notification settings?',
     answer:
-      'Head to Settings → Notifications. You can toggle daily reminders, streak reminders, and community updates on or off. You can also pick what time you\'d like to be reminded — we recommend whenever you usually reach for your phone out of boredom.',
+      'Head to Settings → Notifications. You can toggle daily reminders and streak reminders on or off. You can also pick what time you\'d like to be reminded — we recommend whenever you usually reach for your phone out of boredom.',
   },
   {
     question: 'The app feels slow / something looks broken',

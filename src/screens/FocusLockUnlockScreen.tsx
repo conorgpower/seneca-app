@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Image,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,14 @@ export default function FocusLockUnlockScreen() {
   const { dailyQuote } = useToday();
   const [unlocking, setUnlocking] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const [quoteOverflows, setQuoteOverflows] = useState(false);
+
+  const onQuoteCardLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (height > width) {
+      setQuoteOverflows(true);
+    }
+  }, []);
 
   // If not locked, redirect back
   useEffect(() => {
@@ -52,7 +61,7 @@ export default function FocusLockUnlockScreen() {
   const quoteContent = (
     <View style={styles.quoteOverlay}>
       <Text style={styles.quoteLabel}>Wisdom of the Day</Text>
-      <Text style={styles.quoteText}>"{displayQuote}"</Text>
+      <Text style={[styles.quoteText, quoteOverflows && styles.quoteTextSmall]}>"{displayQuote}"</Text>
       <Text style={styles.quoteAuthor}>— {displayAuthor}</Text>
     </View>
   );
@@ -83,7 +92,7 @@ export default function FocusLockUnlockScreen() {
               </View>
 
               {/* Quote Card — same style as Today screen */}
-              <View style={styles.quoteCard}>
+              <View style={styles.quoteCard} onLayout={onQuoteCardLayout}>
                 {WISDOM_BG_IMAGE ? (
                   <View style={styles.quoteBackground}>
                     <Image
@@ -233,6 +242,10 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+  },
+  quoteTextSmall: {
+    fontSize: theme.typography.sizes.md,
+    lineHeight: 24,
   },
   quoteAuthor: {
     fontSize: theme.typography.sizes.md,
