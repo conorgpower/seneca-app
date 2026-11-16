@@ -33,6 +33,7 @@ import {
   XMarkIcon,
 } from 'react-native-heroicons/solid';
 import { theme } from '../theme';
+import { AIDailyLimitError } from '../services/ai-proxy';
 import { aiService } from '../services/ai.service';
 import { getRandomTextSection } from '../services/supabase';
 import { getDailyPassage } from '../services/philosophical-passages.service';
@@ -404,7 +405,10 @@ export default function ChatScreen() {
       // Show error message
       const errorMessage: IMessage = {
         _id: Math.random().toString(),
-        text: 'I apologize, but I encountered an error. Please try again.',
+        text:
+          error instanceof AIDailyLimitError
+            ? "We've talked a great deal today. Let's pause here and continue tomorrow, with a rested mind."
+            : 'I apologize, but I encountered an error. Please try again.',
         createdAt: new Date(),
         user: {
           _id: 2,

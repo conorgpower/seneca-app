@@ -1,75 +1,30 @@
-import axios from 'axios';
-import Constants from 'expo-constants';
-
-const DEEPSEEK_API_KEY = Constants.expoConfig?.extra?.deepseekApiKey || '';
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+import { callAIProxy } from './ai-proxy';
 
 interface Message {
-  role: 'system' | 'user' | 'assistant';
+  role: 'user' | 'assistant';
   content: string;
 }
 
-interface DeepSeekResponse {
-  choices: Array<{
-    message: {
-      content: string;
-    };
-  }>;
-}
-
-const SYSTEM_PROMPT = `You are Seneca, a wise philosophical guide drawing upon the wisdom of ancient and modern philosophy. You embody the teachings of Stoic philosophers like Marcus Aurelius, Epictetus, and Seneca the Younger, as well as insights from Nietzsche, Plato, Aristotle, and other great thinkers.
-
-Your purpose is to:
-- Help people navigate life's challenges with philosophical wisdom
-- Provide practical, actionable advice grounded in philosophical principles
-- Quote relevant passages from philosophical texts when appropriate
-- Encourage self-reflection and the examined life
-- Speak in a warm, accessible tone while maintaining philosophical depth
-
-When responding:
-- Keep replies SHORT — aim for 2-4 sentences. Avoid long paragraphs or lists.
-- Be concise yet profound — say more with fewer words
-- Use Socratic questioning to deepen understanding
-- Relate ancient wisdom to modern challenges
-- Encourage virtue, resilience, and rational thinking
-- Acknowledge human struggles with compassion
-- Only include ONE quote per response, if any — don't stack multiple quotes
-- IMPORTANT: Never repeat the same quote or passage twice in a conversation. If you've already shared a quote, reference it in different words or use a completely different quote.
-- Always end your response with a question or reflective prompt that invites the user to continue the conversation. Keep the conversation flowing naturally.`;
+// The system prompt, model choice, history trimming and daily limits all live
+// in the deepseek-proxy Supabase edge function.
 
 export class AIService {
+  // Only plain user/assistant turns. Philosophy passages are attached to the
+  // current request only, so they are never resent on later turns.
   private conversationHistory: Message[] = [];
   private usedQuotes: Set<string> = new Set();
   private usedTexts: Set<string> = new Set();
   private personalizationHint: string | null = null;
-
-  private buildSystemPrompt(): string {
-    if (!this.personalizationHint) return SYSTEM_PROMPT;
-
-    return `${SYSTEM_PROMPT}
-
-Light personalization (optional, only when relevant to the user's current message):
-${this.personalizationHint}
-
-Do not force this context into every reply.`;
-  }
-
-  constructor() {
-    this.conversationHistory.push({
-      role: 'system',
-      content: this.buildSystemPrompt(),
-    });
-  }
 
   /**
    * Extract quotes from text to track usage
    */
   private extractQuotes(text: string): string[] {
     const quotePatterns = [
-      /"([^"]+)"/g,  // Double quotes
-      /"([^"]+)"/g,  // Curly quotes
+      /"([^"]+)"/g, // Double quotes
+      /\u201c([^\u201d]+)\u201d/g, // Curly quotes
     ];
-    
+
     const quotes: string[] = [];
     quotePatterns.forEach(pattern => {
       const matches = text.matchAll(pattern);
@@ -79,93 +34,44 @@ Do not force this context into every reply.`;
         }
       }
     });
-    
-    return quotes;
-  }
 
-  /**
-   * Check if context contains already used text
-   */
-  private isTextAlreadyUsed(contextText: string): boolean {
-    const normalizedText = contextText.toLowerCase().trim();
-    return this.usedTexts.has(normalizedText);
+    return quotes;
   }
 
   /**
    * Send a message and get AI response
    */
   async sendMessage(userMessage: string, context?: string): Promise<string> {
-    try {
-      // Skip context if we've already used this exact text
-      if (context && this.isTextAlreadyUsed(context)) {
-        context = undefined;
-      }
-
-      // Build context message with instruction to avoid repetition
-      let messageContent = userMessage;
-      if (context) {
-        this.usedTexts.add(context.toLowerCase().trim());
-        messageContent = `Context: ${context}\n\nUser: ${userMessage}`;
-      }
-
-      // Add reminder about used quotes if any exist
-      if (this.usedQuotes.size > 0) {
-        const quotesReminder = `\n\n[System: You have already shared these quotes in this conversation - do not repeat them: ${Array.from(this.usedQuotes).slice(0, 3).join('; ')}...]`;
-        messageContent += quotesReminder;
-      }
-
-      // Add user message to history
-      this.conversationHistory.push({
-        role: 'user',
-        content: messageContent,
-      });
-
-      // Call DeepSeek API
-      const response = await axios.post<DeepSeekResponse>(
-        DEEPSEEK_API_URL,
-        {
-          model: 'deepseek-chat',
-          messages: this.conversationHistory,
-          temperature: 0.7,
-          max_tokens: 250,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-          },
-        }
-      );
-
-      const aiResponse = response.data.choices[0].message.content;
-
-      // Track quotes used in this response
-      const newQuotes = this.extractQuotes(aiResponse);
-      newQuotes.forEach(quote => this.usedQuotes.add(quote));
-
-      // Add AI response to history
-      this.conversationHistory.push({
-        role: 'assistant',
-        content: aiResponse,
-      });
-
-      return aiResponse;
-    } catch (error) {
-      console.error('DeepSeek API error:', error);
-      throw new Error('Failed to get response from AI. Please try again.');
+    // Skip context if we've already used this exact text
+    if (context && this.usedTexts.has(context.toLowerCase().trim())) {
+      context = undefined;
     }
+
+    const aiResponse = await callAIProxy({
+      feature: 'chat',
+      message: userMessage,
+      context,
+      history: this.conversationHistory,
+      personalizationHint: this.personalizationHint,
+      avoidQuotes: Array.from(this.usedQuotes).slice(-5),
+    });
+
+    if (context) this.usedTexts.add(context.toLowerCase().trim());
+    this.extractQuotes(aiResponse).forEach(quote => this.usedQuotes.add(quote));
+
+    this.conversationHistory.push(
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: aiResponse }
+    );
+
+    return aiResponse;
   }
 
   /**
-   * Clear conversation history (but keep system prompt)
+   * Clear conversation history
    */
   clearHistory() {
-    this.conversationHistory = [
-      {
-        role: 'system',
-        content: this.buildSystemPrompt(),
-      },
-    ];
+    this.conversationHistory = [];
     this.usedQuotes.clear();
     this.usedTexts.clear();
   }
@@ -176,13 +82,6 @@ Do not force this context into every reply.`;
    */
   setPersonalizationHint(hint: string | null) {
     this.personalizationHint = hint;
-
-    if (this.conversationHistory.length > 0 && this.conversationHistory[0].role === 'system') {
-      this.conversationHistory[0] = {
-        role: 'system',
-        content: this.buildSystemPrompt(),
-      };
-    }
   }
 
   /**

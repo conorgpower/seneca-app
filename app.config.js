@@ -72,7 +72,6 @@ export default {
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
       supabaseAssetBucket: process.env.SUPABASE_ASSET_BUCKET,
       supabaseOptimizedAssetBucket: process.env.SUPABASE_OPTIMIZED_ASSET_BUCKET,
-      deepseekApiKey: process.env.DEEPSEEK_API_KEY,
       revenuecatApiKey: process.env.REVENUECAT_API_KEY,
       revenuecatEntitlementId: process.env.REVENUECAT_ENTITLEMENT_ID,
       appsflyerDevKey: process.env.APPSFLYER_DEV_KEY,
